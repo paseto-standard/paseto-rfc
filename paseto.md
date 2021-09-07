@@ -1,11 +1,11 @@
 % title = "PASETO: Platform-Agnostic SEcurity TOkens"
 % abbr = "PASETO"
 % category = "info"
-% docname = "draft-paragon-paseto-rfc-01"
+% docname = "draft-paragon-paseto-rfc-02"
 % workgroup = "(No Working Group)"
 % keyword = ["security", "token"]
 %
-% date = 2018-04-19T16:00:00Z
+% date = 2021-09-08T16:00:00Z
 %
 % [[author]]
 % initials="S."
@@ -25,6 +25,15 @@
 %   email = "hausss@rpi.edu"
 %   [author.address.postal]
 %   country = "United States"
+% [[author]]
+% initials="R."
+% surname="Terjesen"
+% fullname="Robyn Terjesen"
+% organization="Paragon Initiative Enterprises"
+%   [author.address]
+%   email = "robyn@paragonie.com"
+%   [author.address.postal]
+%   country = "United States"
 
 .# Abstract
 
@@ -41,9 +50,9 @@ using public-key cryptography.
 A Platform-Agnostic SEcurity TOken (PASETO) is a cryptographically secure,
 compact, and URL-safe representation of claims intended for space-constrained
 environments such as HTTP Cookies, HTTP Authorization headers, and URI query
-parameters. A PASETO encodes claims to be transmitted in a JSON [@!RFC8259]
-object, and is either encrypted symmetrically or signed using public-key
-cryptography.
+parameters. A PASETO encodes claims to be transmitted (in a JSON [@!RFC8259]
+object by default), and is either encrypted symmetrically or signed using 
+public-key cryptography.
 
 ## Difference Between PASETO and JOSE
 
@@ -58,6 +67,14 @@ PASETO is defined in two pieces:
 
 1. The PASETO Message Format, defined in (#paseto-message-format)
 2. The PASETO Protocol Version, defined in (#protocol-versions)
+
+## Why Not Update JOSE to Be Secure?
+
+Backwards compatibility introduces the risk of downgrade attacks. Conversely, a totally
+separate standard can be designed from the ground up to be secure and misuse-resistant.
+
+For that reason, PASETO does not aspire to update the JOSE family of standards. To do
+so would undermine the security benefits of a non-interoperable alternative.
 
 ## Notation and Conventions
 
@@ -86,9 +103,21 @@ version.purpose.payload.footer
 If no footer is provided, implementations **SHOULD NOT** append a trailing
 period to each payload.
 
+## PASETO Token Versions
+
 The **version** is a string that represents the current version of the protocol.
 Currently, two versions are specified, which each possess their own
-ciphersuites. Accepted values: **v1**, **v2**.
+ciphersuites. Accepted values: **v3**, **v4**.
+
+(Earlier versions of the PASETO RFC specified **v1** and **v2**, but these are
+not proposed for IETF standardization.)
+
+Future standardization efforts **MAY** optionally suffix an additional piece of 
+information to the version to specify a non-JSON encoding for claims. The default
+encoding, when no suffix is applied, is JSON. This suffix does not change the
+cryptography protocol being used (except that the suffix is also authenticated).
+
+## PASETO Token Purposes
 
 The **purpose** is a short string describing the purpose of the token. Accepted
 values: **local**, **public**.
@@ -111,10 +140,11 @@ defined in [@!RFC4648], without `=` padding.
 
 In this document. `b64()` refers to this unpadded variant of base64url.
 
-## Authentication Padding
+## Multi-Part Authentication
 
 Multi-part messages (e.g. header, content, footer) are encoded in a specific
-manner before being passed to the appropriate cryptographic function.
+manner before being passed to the appropriate cryptographic function, to prevent
+canonicalization attacks.
 
 In `local` mode, this encoding is applied to the additional associated data
 (AAD). In `public` mode, which is not encrypted, this encoding is applied to the
@@ -187,19 +217,23 @@ attacks.
 
 # Protocol Versions
 
-This document defines two protocol versions, **v1** and **v2**.
+This document defines two protocol versions for the PASETO standard.
+
+Protocol versions (**Version 3**, **Version 4**) correspond to a specific message
+format version (**v3**, **v4**).
 
 Each protocol version strictly defines the cryptographic primitives used.
 Changes to the primitives requires new protocol versions. Future RFCs **MAY**
 introduce new PASETO protocol versions by continuing the convention
-(e.g. **v3**, **v4**, ...).
+(e.g. **Version 5**, **Version 6**, ...).
 
-Both **v1** and **v2** provide authentication of the entire PASETO message,
-including the **version**, **purpose**, **payload**, and **footer**.
+Both **Version 3** and **Version 4** provide authentication of the entire PASETO 
+message, including the **version**, **purpose**, **payload**, **footer**, and
+(optional) **implicit assertions**.
 
-The initial recommendation is to use **v2**, allowing for upgrades to
-possible future versions **v3**, **v4**, etc. when they are defined in
-the future.
+The initial recommendation is to use **Version 4**, allowing for upgrades to
+possible future versions **Version 5**, **Version 6**, etc. when they are defined 
+in the future.
 
 ## PASETO Protocol Guidelines
 
@@ -218,83 +252,61 @@ or **MUST** be followed:
      secure random number generator, such as **/dev/urandom** on Linux.
    * Key-splitting and including an additional HKDF salt as part of the nonce is
      sufficient for this requirement.
-   * Hashing the plaintext payload with the random nonce is an acceptable 
-     strategy for mitigating random number generator failures, but a secure
-     random number generator **SHOULD** be used even with this safeguard in
-     place.
-3. Non-deterministic, stateful, and otherwise dangerous signature schemes (e.g.
-   ECDSA without deterministic signatures as in [@!RFC6979], XMSS) are
-   forbidden from all PASETO protocols.
-4. Public-key cryptography **MUST** be IND-CCA2 secure to be considered for
+3. Public-key cryptography **MUST** be IND-CCA2 secure to be considered for
    inclusion.
    * This means that RSA with PKCS1v1.5 padding and unpadded RSA **MUST NOT**
      ever be used in a PASETO protocol.
 
-# PASETO Protocol Version v1
+# PASETO Protocol Version 3
 
-Version **v1** is a compatibility mode composed of cryptographic primitives
-likely available on legacy systems. **v1** **SHOULD NOT** be used when all
-systems are able to use **v2**. **v1** **MAY** be used when compatibility
-requirements include systems unable to use cryptographic primitives from **v2**.
+**PASETO Version 3** is composed of NIST-approved algorithms, and will operate
+on tokens with the **v3** version header.
 
-**v1** messages **MUST** use a **purpose** value of either **local** or
+**v3** messages **MUST** use a **purpose** value of either **local** or 
 **public**.
 
-## v1.local
+## v3.local
 
-**v1.local** messages **SHALL** be encrypted and authenticated with
+**v1.3ocal** messages **SHALL** be encrypted and authenticated with
 **AES-256-CTR** (AES-CTR from [@!RFC3686] with a 256-bit key) and
 **HMAC-SHA-384** ([@!RFC4231]), using an **Encrypt-then-MAC** construction.
 
-Encryption and authentication keys are split from the original key and half the
+Encryption and authentication keys are split from the original key and 256-bit
 nonce, facilitated by HKDF [@!RFC5869] using SHA384.
 
-Refer to the operations defined in **v1.Encrypt** and **v1.Decrypt** for a
-formal definition.
+Refer to the operations defined in **PASETO.v3.Encrypt** and 
+**PASETO.v3.Decrypt** for a formal definition.
 
-## v1.public
+## v3.public
 
-**v1.public** messages **SHALL** be signed using RSASSA-PSS as defined in
-[@!RFC8017], with 2048-bit private keys. These messages provide authentication
-but do not prevent the contents from being read, including by those without
-either the **public key** or the **private key**. Refer to the operations
-defined in **v1.Sign** and **v1.Verify** for a formal definition.
+**v1.public** messages **SHALL** be signed using ECDSA with NIST curve P-384 
+as defined in [@!RFC6687]. These messages provide authentication but do not
+prevent the contents from being read, including by those without either the
+**public key** or the **secret key**. Refer to the operations defined in
+**PASETO.v3.Sign** and **PASETO.v3.Verify** for a formal definition.
 
-## Version v1 Algorithms
+## PASETO Version 3 Algorithms
 
-### v1.GetNonce
+### PASETO.v3.Encrypt
 
-Given a message (`m`) and a nonce (`n`):
+Given a message `m`, key `k`, and optional footer `f` (which defaults to empty
+string), and an optional implicit assertion `i` (which defaults to empty string):
 
-1. Calculate HMAC-SHA384 of the message `m` with `n` as the key.
-2. Return the leftmost 32 bytes of step 1.
-
-### v1.Encrypt
-
-Given a message `m`, key `k`, and optional footer `f`
-(which defaults to empty string):
-
-1. Set header `h` to `v1.local.`
-2. Generate 32 random bytes from the OS's CSPRNG.
-3. Optionally, calculate `GetNonce()` of `m` and the output of step 2 to get the
-   nonce, `n`.
-   * This step is to ensure that an RNG failure does not result in a
-     nonce-misuse condition that breaks the security of our stream cipher.
-   * If this step is omitted, the output of step 2 is `n` instead.
-4. Split the key (`k`) into an Encryption key (`Ek`) and an Authentication key
-   (`Ak`), using the leftmost 16 bytes of `n` as the HKDF salt. (See below for
-   pseudocode.)
-   * For encryption keys, the **info** parameter for HKDF **MUST** be set to
-     **paseto-encryption-key**.
-   * For authentication keys, the **info** parameter for HKDF **MUST** be set to
-     **paseto-auth-key-for-aead**.
-   * The output length **MUST** be 32 for both keys.
-5. Encrypt the message using `AES-256-CTR`, using `Ek` as the key and the
-   rightmost 16 bytes of `n` as the nonce. We'll call this `c`. (See below for
-   pseudocode.)
+1. Before encrypting, first assert that the key being used is intended for use
+   with `v3.local` tokens. If this assertion fails, abort encryption.
+2. Set header `h` to `v3.local.`
+3. Generate 32 random bytes from the OS's CSPRNG to get the nonce, `n`.
+4. Split the key into an Encryption key (`Ek`) and Authentication key (`Ak`),
+   using HKDF-HMAC-SHA384, with `n` appended to the info rather than the salt.
+   * The output length **MUST** be 48 for both key derivations.
+   * The derived key will be the leftmost 32 bytes of the first HKDF derivation.
+   The remaining 16 bytes of the first key derivation (from which `Ek` is derived)
+   will be used as a counter nonce (`n2`):
+5. Encrypt the message using `AES-256-CTR`, using `Ek` as the key and `n2` as the nonce.
+   We'll call the encrypted output of this step `c`.
 6. Pack `h`, `n`, `c`, and `f` together (in that order) using PAE (see
    (#authentication-padding)). We'll call this `preAuth`.
-7. Calculate HMAC-SHA-384 of the output of `preAuth`, using `Ak` as the
+7. Calculate HMAC-SHA384 of the output of `preAuth`, using `Ak` as the
    authentication key. We'll call this `t`.
 8. If `f` is:
    * Empty: return h || b64(n || c || t)
@@ -304,17 +316,19 @@ Given a message `m`, key `k`, and optional footer `f`
 Example code:
 
 ~~~
-Ek = hkdf_sha384(
-   len = 32
-   ikm = k,
-   info = "paseto-encryption-key",
-   salt = n[0:16]
+tmp = hkdf_sha384(
+    len = 48,
+    ikm = k,
+    info = "paseto-encryption-key" || n,
+    salt = NULL
 );
+Ek = tmp[0:32]
+n2 = tmp[32:]
 Ak = hkdf_sha384(
-   len = 32
-   ikm = k,
-   info = "paseto-auth-key-for-aead",
-   salt = n[0:16]
+    len = 48,
+    ikm = k,
+    info = "paseto-auth-key-for-aead" || n,
+    salt = NULL
 );
 ~~~
 Figure: Step 4: Key splitting with HKDF-SHA384 as per [@!RFC5869].
@@ -322,58 +336,63 @@ Figure: Step 4: Key splitting with HKDF-SHA384 as per [@!RFC5869].
 ~~~
 c = aes256ctr_encrypt(
     plaintext = m,
-    nonce = n[16:]
+    nonce = n2
     key = Ek
 );
 ~~~
-Figure: Step 5: PASETO v1 encryption (calculating `c`)
+Figure: Step 5: PASETO Version 3 encryption (calculating `c`)
 
-### v1.Decrypt
+### PASETO.v3.Decrypt
 
 Given a message `m`, key `k`, and optional footer `f`
 (which defaults to empty string):
 
-1. If `f` is not empty, implementations **MAY** verify that the value appended
+1. Before decrypting, first assert that the key being used is intended for use
+   with `v3.local` tokens. If this assertion fails, abort decryption.
+2. If `f` is not empty, implementations **MAY** verify that the value appended
    to the token matches some expected string `f`, provided they do so using a
    constant-time string compare function.
-2. Verify that the message begins with `v1.local.`, otherwise throw an
+3. Verify that the message begins with `v3.local.`, otherwise throw an
    exception. This constant will be referred to as `h`.
-3. Decode the payload (`m` sans `h`, `f`, and the optional trailing period
+4. Decode the payload (`m` sans `h`, `f`, and the optional trailing period
    between `m` and `f`) from b64 to raw binary. Set:
    * `n` to the leftmost 32 bytes
    * `t` to the rightmost 48 bytes
    * `c` to the middle remainder of the payload, excluding `n` and `t`
-4. Split the key (`k`) into an Encryption key (`Ek`) and an Authentication key
-   (`Ak`), using the leftmost 16 bytes of `n` as the HKDF salt. (See below for
-   pseudocode.)
+5. Split the key (`k`) into an Encryption key (`Ek`) and an Authentication key
+   (`Ak`), `n` appended to the HKDF info.
    * For encryption keys, the **info** parameter for HKDF **MUST** be set to
      **paseto-encryption-key**.
    * For authentication keys, the **info** parameter for HKDF **MUST** be set to
      **paseto-auth-key-for-aead**.
-   * The output length **MUST** be 32 for both keys.
-5. Pack `h`, `n`, `c`, and `f` together (in that order) using PAE (see
+   * The output length **MUST** be 48 for both key derivations.
+     The leftmost 32 bytes of the first key derivation will produce `Ek`, while
+     the remaining 16 bytes will be the AES nonce `n2`.
+6. Pack `h`, `n`, `c`, `f`, and `i` together (in that order) using PAE (see
    (#authentication-padding)). We'll call this `preAuth`.
-6. Recalculate HMAC-SHA-384 of `preAuth` using `Ak` as the key. We'll call this
+7. Recalculate HMAC-SHA-384 of `preAuth` using `Ak` as the key. We'll call this
    `t2`.
-7. Compare `t` with `t2` using a constant-time string compare function. If they
+8. Compare `t` with `t2` using a constant-time string compare function. If they
    are not identical, throw an exception.
-8. Decrypt `c` using `AES-256-CTR`, using `Ek` as the key and the rightmost 16
+9. Decrypt `c` using `AES-256-CTR`, using `Ek` as the key and the rightmost 16
    bytes of `n` as the nonce, and return this value.
 
 Example code:
 
 ~~~
-Ek = hkdf_sha384(
-   len = 32
-   ikm = k,
-   info = "paseto-encryption-key",
-   salt = n[0:16]
+tmp = hkdf_sha384(
+    len = 48,
+    ikm = k,
+    info = "paseto-encryption-key" || n,
+    salt = NULL
 );
+Ek = tmp[0:32]
+n2 = tmp[32:]
 Ak = hkdf_sha384(
-   len = 32
-   ikm = k,
-   info = "paseto-auth-key-for-aead",
-   salt = n[0:16]
+    len = 48,
+    ikm = k,
+    info = "paseto-auth-key-for-aead" || n,
+    salt = NULL
 );
 ~~~
 Figure: Step 4: Key splitting with HKDF-SHA384 as per [@!RFC5869].
@@ -381,217 +400,317 @@ Figure: Step 4: Key splitting with HKDF-SHA384 as per [@!RFC5869].
 ~~~
 return aes256ctr_decrypt(
    cipherext = c,
-   nonce = n[16:]
+   nonce = n2
    key = Ek
 );
 ~~~
-Figure: Step 8: PASETO v1 decryption
+Figure: Step 8: PASETO Version 3 decryption
 
-### v1.Sign
+### PASETO.v3.Sign
 
-Given a message `m`, 2048-bit RSA secret key `sk`, and optional footer `f`
+Given a message `m`, 384-bit ECDSA secret key `sk`, an optional footer `f`
+(which defaults to empty string), and an optional implicit assertion `i`
 (which defaults to empty string):
 
-1. Set `h` to `v1.public.`
-2. Pack `h`, `m`, and `f` together (in that order) using PAE (see
+1. Before signing, first assert that the key being used is intended for use
+   with `v3.public` tokens, and is a secret key (not a public key). If this
+   assertion fails, abort signing.
+2. Set `cpk` to the compressed point representation of the ECDSA public key (see
+   [point compression](https://www.secg.org/sec1-v2.pdf)), using [#paseto-v3-compresspublickey].
+3. Set `h` to `v3.public.`
+4. Pack `cpk`, `h`, `m`, `f`, and `i` together (in that order) using PAE (see
    (#authentication-padding)). We'll call this `m2`.
-3. Sign `m2` using RSA with the private key `sk`. We'll call this `sig`. The
-   padding mode **MUST** be RSASSA-PSS [@!RFC8017]; PKCS1v1.5 is explicitly
-   forbidden. The public exponent `e` **MUST** be 65537. The mask generating
-   function **MUST** be MGF1+SHA384. The hash function **MUST** be SHA384.
-   (See below for pseudocode.)
-4. If `f` is:
+5. Sign `m2` using ECDSA over P-384 and SHA-384 with the private key `sk`.
+   We'll call this `sig`. The output of `sig` MUST be in the format `r || s`
+   (where `||`means concatenate), for a total length of 96 bytes.
+   * Signatures **SHOULD** use deterministic k-values ([@!RFC6979]) if possible, 
+     to mitigate the risk of [k-value reuse](https://blog.trailofbits.com/2020/06/11/ecdsa-handle-with-care/).
+   * If possible, hedged signatures ([@!RFC6979] + additional randomness when generating
+     k-values to provide resilience to fault attacks) are preferred over [@!RFC6979] alone.
+   * If [@!RFC6979] is not available in your programming language, ECDSA **MUST** use a CSPRNG
+     to generate the k-value.
+6. If `f` is:
    * Empty: return h || b64(m || sig)
    * Non-empty: return h || b64(m || sig) || `.` || b64(f)
    * ...where || means "concatenate"
 
 ~~~
-sig = crypto_sign_rsa(
-   message = m2,
-   private_key = sk,
-   padding_mode = "pss",
-   public_exponent = 65537,
-   hash = "sha384"
-   mgf = "mgf1+sha384"
+cpk = PASETO.v3.CompressPublicKey(sk.getPublicKey());
+m2 = PASETO.PAE(cpk, h, m, f, i);
+sig = crypto_sign_ecdsa_p384(
+    message = m2,
+    private_key = sk
 );
 ~~~
-Figure: Pseudocode: RSA signature algorithm used in PASETO v1
+Figure: Pseudocode: ECDSA signature algorithm used in PASETO v3
 
-### v1.Verify
+### PASETO.v3.Verify
 
-Given a signed message `sm`, RSA public key `pk`, and optional
-footer `f` (which defaults to empty string):
+Given a signed message `sm`, ECDSA public key `pk`,
+and optional footer `f` (which defaults to empty string), and an optional
+implicit assertion `i` (which defaults to empty string):
 
-1. If `f` is not empty, implementations **MAY** verify that the value appended
+1. Before verifying, first assert that the key being used is intended for use
+   with `v3.public` tokens, and is a public key (not a secret key). If this
+   assertion fails, abort verifying.
+2. If `f` is not empty, implementations **MAY** verify that the value appended
    to the token matches some expected string `f`, provided they do so using a
    constant-time string compare function.
-2. Verify that the message begins with `v1.public.`, otherwise throw an
+3. Set `cpk` to the compressed point representation of the ECDSA public key (see
+   [point compression](https://www.secg.org/sec1-v2.pdf)), using [#paseto-v3-compresspublickey].
+4. Verify that the message begins with `v3.public.`, otherwise throw an
    exception. This constant will be referred to as `h`.
-3. Decode the payload (`sm` sans `h`, `f`, and the optional trailing period
-   between `m` and `f`) from b64 to raw binary. Set:
-   * `s` to the rightmost 256 bytes
+5. Decode the payload (`sm` sans `h`, `f`, and the optional trailing period
+   between `m` and `f`) from base64url to raw binary. Set:
+   * `s` to the rightmost 96 bytes
    * `m` to the leftmost remainder of the payload, excluding `s`
-4. Pack `h`, `m`, and `f` together (in that order) using PAE (see
+6. Pack `h`, `m`, `f`, and `i` together (in that order) using PAE (see
    (#authentication-padding)). We'll call this `m2`.
-5. Use RSA to verify that the signature is valid for the message.
+7. Use RSA to verify that the signature is valid for the message.
    The padding mode **MUST** be RSASSA-PSS [@!RFC8017]; PKCS1v1.5 is
    explicitly forbidden. The public exponent `e` **MUST** be 65537.
    The mask generating function **MUST** be MGF1+SHA384. The hash function
    **MUST** be SHA384. (See below for pseudocode.)
-6. If the signature is valid, return `m`. Otherwise, throw an exception.
+8. If the signature is valid, return `m`. Otherwise, throw an exception.
 
 ~~~
-valid = crypto_sign_rsa_verify(
+cpk = PASETO.v3.CompressPublicKey(pk);
+m2 = PASETO.PAE(cpk, h, m, f, i);
+valid = crypto_sign_ecdsa_p384_verify(
     signature = s,
     message = m2,
-    public_key = pk,
-    padding_mode = "pss",
-    public_exponent = 65537,
-    hash = "sha384"
-    mgf = "mgf1+sha384"
+    public_key = pk
 );
 ~~~
-Figure: Pseudocode: RSA signature validation for PASETO v1
+Figure: Pseudocode: ECDSA signature validation for PASETO Version 3
 
-# PASETO Protocol Version v2
+### PASETO.v3.CompressPublicKey
 
-Version **v2** is the **RECOMMENDED** protocol version. **v2** **SHOULD** be
-used in preference to **v1**. Applications using PASETO **SHOULD** only support
-**v2** messages, but **MAY** support **v1** messages if the cryptographic
-primitives used in **v2** are not available on all machines.
+Given a public key consisting of two coordinates (X, Y):
 
-**v2** messages **MUST** use a **purpose**  value of either **local** or
+1. Set the header to `0x02`.
+2. Take the least significant bit of `Y` and add it to the header.
+3. Append the X coordinate (in big-endian byte order) to the header.
+
+~~~
+lsb(y):
+   return y[y.length - 1] & 1
+
+pubKeyCompress(x, y):
+   header = [0x02 + lsb(y)]
+   return header.concat(x)
+~~~
+Figure: Pseudocode: Point compression as used in PASETO Version 3.
+
+# PASETO Protocol Version v4
+
+**PASETO Version 4** is the recommended version of PASETO, and will 
+operate on tokens with the **v4** version header.
+
+**v4** messages **MUST** use a **purpose** value of either **local** or
 **public**.
 
-## v2.local
+## v4.local
 
-**v2.local** messages **MUST** be encrypted with XChaCha20-Poly1305, a variant
-of ChaCha20-Poly1305 [@!RFC7539] defined in (#aeadxchacha20poly1305). Refer
-to the operations defined in **v2.Encrypt** and **v2.Decrypt** for a formal
-definition.
+**v4.local** messages **MUST** be encrypted with XChaCha20, a variant
+of ChaCha20 [@!RFC7539] defined in [XChaCha20](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-xchacha-03).
+Refer to the operations defined in **PASETO.v4.Encrypt** and 
+**PASETO.v4.Decrypt** for a formal definition.
 
-## v2.public
+## v4.public
 
-**v2.public** messages **MUST** be signed using Ed25519 [@!RFC8032] public key
+**v4.public** messages **MUST** be signed using Ed25519 [@!RFC8032] public key
 signatures. These messages provide authentication but do not prevent the
 contents from being read, including by those without either the **public key**
-or the **private key**. Refer to the operations defined in **v2.Sign** and
-**v2.Verify** for a formal definition.
+or the **private key**. Refer to the operations defined in **v4.Sign** and
+**v4.Verify** for a formal definition.
 
-## Version v2 Algorithms
+## PASETO Version 4 Algorithms
 
-### v2.Encrypt
+### PASETO.v4.Encrypt
 
 Given a message `m`, key `k`, and optional footer `f`.
 
-1. Set header `h` to `v2.local.`
-2. Generate 24 random bytes from the OS's CSPRNG.
-3. Optionally, calculate BLAKE2b of the message `m` with the output of step 2 as
-   the key, with an output length of 24. This will be our nonce, `n`.
-   * This step is to ensure that an RNG failure does not result in a
-     nonce-misuse condition that breaks the security of our stream cipher.
-   * If this step is omitted, the output of step 2 is `n` instead.
-4. Pack `h`, `n`, and `f` together (in that order) using PAE (see (#authentication-padding)).
-   We'll call this `preAuth`.
-5. Encrypt the message using XChaCha20-Poly1305, using an AEAD interface such as
-   the one provided in libsodium. (See below for pseudocode.)
-6. If `f` is:
+1. Before encrypting, first assert that the key being used is intended for use
+   with `v4.local` tokens. If this assertion fails, abort encryption.
+2. Set header `h` to `v4.local.`
+3. Generate 32 random bytes from the OS's CSPRNG, `n`.
+4. Split the key into an Encryption key (`Ek`) and Authentication key (`Ak`),
+   using keyed BLAKE2b, using the domain separation constants and `n` as the
+   message, and the input key as the key. The first value will be 56 bytes,
+   the second will be 32 bytes.
+   The derived key will be the leftmost 32 bytes of the hash output.
+   The remaining 24 bytes will be used as a counter nonce (`n2`).
+5. Encrypt the message using XChaCha20, using `n2` from step 3 as the nonce and `Ek` as the key.
+6. Pack `h`, `n`, `c`, `f`, and `i` together (in that order) using
+   PAE (see (#authentication-padding)). We'll call this `preAuth`.
+7. Calculate BLAKE2b-MAC of the output of `preAuth`, using `Ak` as the
+   authentication key. We'll call this `t`.
+8. If `f` is:
    * Empty: return h || b64(n || c)
    * Non-empty: return h || b64(n || c) || `.` || b64(f)
    * ...where || means "concatenate"
 
 ~~~
-c = crypto_aead_xchacha20poly1305_encrypt(
-    message = m
-    aad = preAuth
-    nonce = n
-    key = k
+tmp = crypto_generichash(
+    msg = "paseto-encryption-key" || n,
+    key = key,
+    length = 56
+);
+Ek = tmp[0:32]
+n2 = tmp[32:]
+Ak = crypto_generichash(
+    msg = "paseto-auth-key-for-aead" || n,
+    key = key,
+    length = 32
 );
 ~~~
-Figure: Step 5: PASETO v2 encryption (calculating `c`)
+Figure: Step 4: Key splitting with BLAKE2b.
 
-### v2.Decrypt
+~~~
+c = crypto_stream_xchacha20_xor(
+    message = m
+    nonce = n2
+    key = Ek
+);
+preAuth = PASETO.PAE(h, n, c, f, i)
+t = crypto_generichash(
+    message = preAuth
+    key = Ak,
+    length = 32
+);
+~~~
+Figure: Steps 5-7: PASETO Version 4 encryption
+
+### PASETO.v4.Decrypt
 
 Given a message `m`, key `k`, and optional footer `f`.
 
-1. If `f` is not empty, implementations **MAY** verify that the value appended
+1. Before decrypting, first assert that the key being used is intended for use
+   with `v4.local` tokens. If this assertion fails, abort decryption.
+2. If `f` is not empty, implementations **MAY** verify that the value appended
    to the token matches some expected string `f`, provided they do so using a
    constant-time string compare function.
-2. Verify that the message begins with `v2.local.`, otherwise throw an
+3. Verify that the message begins with `v4.local.`, otherwise throw an
    exception. This constant will be referred to as `h`.
 3. Decode the payload (`m` sans `h`, `f`, and the optional trailing period
    between `m` and `f`) from base64url to raw binary. Set:
-   * `n` to the leftmost 24 bytes
+   * `n` to the leftmost 32 bytes
    * `c` to the middle remainder of the payload, excluding `n`.
-4. Pack `h`, `n`, and `f` together (in that order) using PAE (see
-   (#authentication-padding)). We'll call this `preAuth`
-5. Decrypt `c` using `XChaCha20-Poly1305`, store the result in `p`.
-   (See below for pseudocode.)
-6. If decryption failed, throw an exception. Otherwise, return `p`.
+4. Split the key into an Encryption key (`Ek`) and Authentication key (`Ak`),
+   using keyed BLAKE2b, using the domain separation constants and `n` as the
+   message, and the input key as the key. The first value will be 56 bytes,
+   the second will be 32 bytes.
+   The derived key will be the leftmost 32 bytes of the hash output.
+   The remaining 24 bytes will be used as a counter nonce (`n2`)
+5. Pack `h`, `n`, `c`, `f`, and `i` together (in that order) using
+   PAE (see (#authentication-padding)). We'll call this `preAuth`.
+6. Re-calculate BLAKE2b-MAC of the output of `preAuth`, using `Ak` as the
+   authentication key. We'll call this `t2`.
+7. Compare `t` with `t2` using a constant-time string compare function. If they
+   are not identical, throw an exception.
+   * You **MUST** use a constant-time string compare function to be compliant.
+     If you do not have one available to you in your programming language/framework,
+     you MUST use [Double HMAC](https://paragonie.com/blog/2015/11/preventing-timing-attacks-on-string-comparison-with-double-hmac-strategy).
+8. Decrypt `c` using `XChaCha20`, store the result in `p`.
+9. If decryption failed, throw an exception. Otherwise, return `p`.
 
 ~~~
-p = crypto_aead_xchacha20poly1305_decrypt(
-    ciphertext = c
-    aad = preAuth
-    nonce = n
-    key = k
+tmp = crypto_generichash(
+    msg = "paseto-encryption-key" || n,
+    key = key,
+    length = 56
+);
+Ek = tmp[0:32]
+n2 = tmp[32:]
+Ak = crypto_generichash(
+    msg = "paseto-auth-key-for-aead" || n,
+    key = key,
+    length = 32
 );
 ~~~
-Figure: Step 8: PASETO v2 decryption
+Figure: Step 4: Key splitting with BLAKE2b.
 
-### v2.Sign
+~~~
+preAuth = PASETO.PAE(h, n, c, f, i)
+t2 = crypto_generichash(
+    message = preAuth
+    key = Ak,
+    length = 32
+);
+if (not constant_time_compare(t2, t)) {
+    throw new Exception("Invalid auth tag");
+}
+p = crypto_stream_xchacha20_xor(
+   ciphertext = c
+   nonce = n2
+   key = Ek
+);
+~~~
+Figure: Steps 5-8: PASETO v4 decryption
+
+### PASETO.v4.Sign
 
 Given a message `m`, Ed25519 secret key `sk`, and
 optional footer `f` (which defaults to empty string):
 
-1. Set `h` to `v2.public.`
-2. Pack `h`, `m`, and `f` together (in that order) using PAE (see
+1. Before signing, first assert that the key being used is intended for use
+   with `v4.public` tokens, and is a secret key (not a public key). If this
+   assertion fails, abort signing.
+2. Set `h` to `v4.public.`
+3. Pack `h`, `m`, `f`, and `i` together (in that order) using PAE (see
    (#authentication-padding)).
    We'll call this `m2`.
-3. Sign `m2` using Ed25519 `sk`. We'll call this `sig`.
+4. Sign `m2` using Ed25519 `sk`. We'll call this `sig`.
    (See below for pseudocode.)
-4. If `f` is:
+5. If `f` is:
    * Empty: return h || b64(m || sig)
    * Non-empty: return h || b64(m || sig) || `.` || b64(f)
    * ...where || means "concatenate"
 
 ~~~
+m2 = PASETO.PAE(h, m, f, i);
 sig = crypto_sign_detached(
     message = m2,
     private_key = sk
 );
 ~~~
-Figure: Step 3: Generating an Ed25519 with libsodium
+Figure: Step 4: Generating an Ed25519 with libsodium
 
-### v2.Verify
+### PASETO.v4.Verify
 
 Given a signed message `sm`, public key `pk`, and optional footer `f`
-(which defaults to empty string):
+(which defaults to empty string), and an optional
+implicit assertion `i` (which defaults to empty string):
 
-1. If `f` is not empty, implementations **MAY** verify that the value appended
+1. Before verifying, first assert that the key being used is intended for use
+   with `v4.public` tokens, and is a public key (not a secret key). If this
+   assertion fails, abort verifying.
+2. If `f` is not empty, implementations **MAY** verify that the value appended
    to the token matches some expected string `f`, provided they do so using a
    constant-time string compare function.
-2. Verify that the message begins with `v2.public.`, otherwise throw an
+3. Verify that the message begins with `v4.public.`, otherwise throw an
    exception. This constant will be referred to as `h`.
-3. Decode the payload (`sm` sans `h`, `f`, and the optional trailing period
+4. Decode the payload (`sm` sans `h`, `f`, and the optional trailing period
    between `m` and `f`) from base64url to raw binary. Set:
    * `s` to the rightmost 64 bytes
    * `m` to the leftmost remainder of the payload, excluding `s`
-4. Pack `h`, `m`, and `f` together (in that order) using PAE (see
+5. Pack `h`, `m`, `f`, and `i` together (in that order) using PAE (see
    (#authentication-padding)).
    We'll call this `m2`.
-5. Use Ed25519 to verify that the signature is valid for the message:
+6. Use Ed25519 to verify that the signature is valid for the message:
    (See below for pseudocode.)
-6. If the signature is valid, return `m`. Otherwise, throw an exception.
+7. If the signature is valid, return `m`. Otherwise, throw an exception.
 
 ~~~
+m2 = PASETO.PAE(h, m, f, i);
 valid = crypto_sign_verify_detached(
     signature = s,
     message = m2,
     public_key = pk
 );
 ~~~
-Figure: Step 5: Validating the Ed25519 signature using libsodium.
+Figure: Steps 5-6: Validating the Ed25519 signature using libsodium.
 
 # Payload Processing
 
@@ -619,7 +738,9 @@ combination other than that which was specified during the creation of this key.
 
 ## Registered Claims
 
-The following keys are reserved for use within PASETO. Users **SHOULD NOT**
+### Payload Claims
+
+The following keys are reserved for use within PASETO payloads. Users **MUST NOT**
 write arbitrary/invalid data to any keys in a top-level PASETO in the list
 below:
 
@@ -632,10 +753,8 @@ below:
 | nbf | Not Before | DtTime | {"nbf":"2038-04-01T00:00:00+00:00"} |
 | iat | Issued At  | DtTime | {"iat":"2038-03-17T00:00:00+00:00"} |
 | jti | Token ID   | string | {"jti":"87IFSGFgPNtQNNuw0AtuLttP"}  |
-| kid | Key-ID     | string | {"kid":"stored-in-the-footer"}      |
 
 In the table above, DtTime means an ISO 8601 compliant DateTime string.
-See [#keyid-support] for special rules about `kid` claims.
 
 Any other claims can be freely used. These keys are only reserved in the
 top-level JSON object.
@@ -648,6 +767,29 @@ discourage setting invalid/arbitrary data to these reserved claims.
 For example: Storing any string that isn't a valid ISO 8601 DateTime in the
 `exp` claim should result in an exception or error state (depending on the
 programming language in question).
+
+### Optional Footer Claims
+
+The optional footer **MAY** contain an optional JSON object [@!RFC8259].
+It does not have to be JSON, but if it is, implementations **MUST** implement
+the safety controls in [#json-handling]. If the optional footer does contain JSON,
+the following claims may be stored in the footer.
+
+Users SHOULD NOT write arbitrary/invalid data to any keys in a top-level 
+PASETO footer in the list below:
+
+| Key | Name           | Type   | Example                                                       |
+| --- | -------------- | ------ | ------------------------------------------------------------- |
+| kid | Key ID         | string | {"kid":"k4.lid.iVtYQDjr5gEijCSjJC3fQaJm7nCeQSeaty0Jixy8dbsk"} |
+| wpk | Wrapped PASERK | string | {"wpk":"k4.local-wrap.pie.pu-fBxw... (truncated) ...0eo8iCS"} |
+
+Any other claims can be freely used. These keys are only reserved in the top-level
+JSON object (if the footer contains a JSON object).
+
+The keys in the above table are case-sensitive.
+
+Implementors SHOULD provide some means to discourage setting invalid/arbitrary data
+to these reserved claims.
 
 ### Key-ID Support
 
@@ -691,106 +833,121 @@ database or other key-value store to select the appropriate cryptographic key.
 These search operations **MUST** fail closed if no valid key is found for the
 given key identifier.
 
-# AEAD_XChaCha20_Poly1305
+## Optional Footer
 
-XChaCha20-Poly1305 is a variant of the ChaCha20-Poly1305 AEAD construction as
-defined in [@!RFC7539] that uses a 192-bit nonce instead of a 64-bit nonce.
+PASETO places no restrictions on the contents of the authenticated footer.
+The footer's contents **MAY** be JSON-encoded (as is the payload), but it
+doesn't have to be.
 
-The algorithm for XChaCha20-Poly1305 is as follows:
+The footer contents is intended to be free-form and application-specific.
 
-1. Calculate a subkey from the first 16 bytes of the nonce and the key, using
-   HChaCha20 ((#hchacha20)).
-2. Use the subkey and remaining 8 bytes of the nonce (prefixed with 4 NUL
-   bytes) with AEAD_CHACHA20_POLY1305 from [@!RFC7539] as normal.
+### Storing JSON in the Footer
 
-XChaCha20-Poly1305 implementations already exist in
-[libsodium](https://download.libsodium.org/doc/secret-key_cryptography/xchacha20-poly1305_construction.html),
-[Monocypher](https://github.com/LoupVaillant/Monocypher),
-[xsecretbox](https://github.com/jedisct1/xsecretbox),
-and a standalone [Go](https://github.com/aead/chacha20) library.
+Implementations that allow users to store JSON-encoded objects in the footer
+**MUST** give users some mechanism to validate the footer before decoding.
 
-## Motivation for XChaCha20-Poly1305
+Some example parser rules include:
 
-As long as ChaCha20-Poly1305 is a secure AEAD cipher and ChaCha is a secure
-pseudorandom function (PRF), XChaCha20-Poly1305 is secure.
+1. Enforcing a maximum length of the JSON-encoded string.
+2. Enforcing a maximum depth of the decoded JSON object.
+   (Recommended default: Only 1-dimensional objects.)
+3. Enforcing the maximum number of named keys within an object.
 
-The nonce used by the original ChaCha20-Poly1305 is too short to safely use with
-random strings for long-lived keys.
+The motivation for these additional rules is to mitigate the following
+security risks:
 
-With XChaCha20-Poly1305, users can safely generate a random 192-bit nonce for
-each message and not worry about nonce-reuse vulnerabilities.
+1. Stack overflows in JSON parsers caused by too much recursion.
+2. Denial-of-Service attacks enabled by hash-table collisions.
 
-## HChaCha20
+#### Enforcing Maximum Depth Without Parsing the JSON String
 
-**HChaCha20** is an intermediary step towards XChaCha20 based on the
-construction and security proof used to create
-[XSalsa20](https://cr.yp.to/snuffle/xsalsa-20110204.pdf), an extended-nonce
-Salsa20 variant used in [NaCl](https://nacl.cr.yp.to).
+Arbitrary-depth JSON strings can be a risk for stack overflows in some JSON
+parsing libraries. One mitigation to this is to enforce an upper limit on the
+maximum stack depth. Some JSON libraries do not allow you to configure this
+upper limit, so you're forced to take matters into your own hands.
 
-HChaCha20 is initialized the same way as the ChaCha cipher, except that
-HChaCha20 uses a 128-bit nonce and has no counter.
+A simple way of enforcing the maximum depth of a JSON string without having
+to parse it with your JSON library is to employ the following algorithm:
 
-Consider the two figures below, where each non-whitespace character represents
-one nibble of information about the ChaCha states (all numbers little-endian): 
+1. Create a copy of the JSON string with all `\"` sequences and whitespace
+   characters removed.
+   This will prevent weird edge cases in step 2.
+2. Use a regular expression to remove all quoted strings and their contents.
+   For example, replacing `/"[^"]+?"([:,\}\]])/` with the first match will
+   strip the contents of any quoted strings.
+3. Remove all characters except `[`, `{`, `}`, and `]`.
+4. If you're left with an empty string, return `1`.
+5. Initialize a variable called `depth` to `1`.
+6. While the stripped variable is not empty **and** not equal to the output
+   of the previous iteration, remove all `{}` and `[]` pairs, then increment
+   `depth`.
+7. If you end up with a non-empty string, you know you have invalid JSON:
+   Either you have a `[` that isn't paired with a `]`, or a `{` that isn't
+   paired with a `}`. Throw an exception.
+8. Return `depth`.
 
-~~~
-cccccccc  cccccccc  cccccccc  cccccccc
-kkkkkkkk  kkkkkkkk  kkkkkkkk  kkkkkkkk
-kkkkkkkk  kkkkkkkk  kkkkkkkk  kkkkkkkk
-bbbbbbbb  nnnnnnnn  nnnnnnnn  nnnnnnnn
-~~~
-Figure: ChaCha20 State: c=constant k=key b=blockcount n=nonce
-
-~~~
-cccccccc  cccccccc  cccccccc  cccccccc
-kkkkkkkk  kkkkkkkk  kkkkkkkk  kkkkkkkk
-kkkkkkkk  kkkkkkkk  kkkkkkkk  kkkkkkkk
-nnnnnnnn  nnnnnnnn  nnnnnnnn  nnnnnnnn
-~~~
-Figure: HChaCha20 State: c=constant k=key n=nonce
-
-After initialization, proceed through the ChaCha rounds as usual.
-
-Once the 20 ChaCha rounds have been completed, the first 128 bits and last 128
-bits of the keystream (both little-endian) are concatenated, and this 256-bit
-subkey is returned.
-
-### Test Vector for the HChaCha20 Block Function
-
-* Key = 00:01:02:03:04:05:06:07:08:09:0a:0b:0c:0d:0e:0f:10:11:12:13:14:15:16:17:18:19:1a:1b:1c:1d:1e:1f.
-  The key is a sequence of octets with no particular structure before we
-  copy it into the HChaCha state.
-* Nonce = (00:00:00:09:00:00:00:4a:00:00:00:00:31:41:59:27)
-
-After setting up the HChaCha state, it looks like this:
+An example of this logic implemented below:
 
 ~~~
-61707865 3320646e 79622d32 6b206574
-03020100 07060504 0b0a0908 0f0e0d0c
-13121110 17161514 1b1a1918 1f1e1d1c
-09000000 4a000000 00000000 27594131
+function getJsonDepth(data: string): number {
+    // Step 1
+    let stripped = data.replace(/\\"/g, '').replace(/\s+/g, '');
+    
+    // Step 2
+    stripped = stripped.replace(/"[^"]+"([:,\}\]])/g, '$1');
+    
+    // Step 3
+    stripped = stripped.replace(/[^\[\{\}\]]/g, '');
+    
+    // Step 4
+    if (stripped.length === 0) {
+        return 1;
+    }
+    // Step 5
+    let previous = '';
+    let depth = 1;
+    
+    // Step 6
+    while (stripped.length > 0 && stripped !== previous) {
+        previous = stripped;
+        stripped = stripped.replace(/({}|\[\])/g, '');
+        depth++;
+    }
+    
+    // Step 7
+    if (stripped.length > 0) {
+        throw new Error(`Invalid JSON string`);
+    }
+    
+    // Step 8
+    return depth;
+}
 ~~~
-Figure: ChaCha state with the key setup.
+Figure: JSON Depth Calculation
 
-After running 20 rounds (10 column rounds interleaved with 10
-"diagonal rounds"), the HChaCha state looks like this:
+#### Enforcing Maximum Key Count Without Parsing the JSON String
+
+Hash-collision Denial of Service attacks (Hash-DoS) is made possible by
+creating a very large number of keys that will hash to the same value,
+with a given hash function (e.g., djb33).
+
+One mitigation strategy is to limit the number of keys contained within
+an object (at any arbitrary depth).
+
+The easiest way is to count the number of times you encounter a `":`
+token that isn't followed by a backslash (to side-step corner-cases where
+JSON is encoded as a string inside a JSON value).
 
 ~~~
-82413b42 27b27bfe d30e4250 8a877d73
-4864a70a f3cd5479 37cd6a84 ad583c7b
-8355e377 127ce783 2d6a07e0 e5d06cbc
-a0f9e4d5 8a74a853 c12ec413 26d3ecdc
+/**
+ * Split the string based on the number of `":` pairs without a preceding
+ * backslash, then return the number of pieces it was broken into.
+ */
+function countKeys(json: string): number {
+    return json.split(/[^\\]":/).length;
+}
 ~~~
-Figure: HChaCha state after 20 rounds
-
-HChaCha20 will then return only the first and last rows, resulting
-in the following 256-bit key:
-
-~~~
-82413b4 227b27bfe d30e4250 8a877d73
-a0f9e4d 58a74a853 c12ec413 26d3ecdc
-~~~
-Figure: Resultant HChaCha20 subkey
+Figure: Counting the number of keys in a JSON object
 
 # Intended Use-Cases for PASETO
 
@@ -812,11 +969,11 @@ mechanism to prevent replay attacks within the token lifetime.
 # Security Considerations
 
 PASETO was designed in part to address known deficits of the JOSE standards
-that lead to insecure implementations.
+that directly caused insecure implementations.
 
-PASETO uses versioned protocols, rather than runtime ciphersuite negotiation,
-to prevent insecure algorithms from being selected. Mix-and-match is not a
-robust strategy for usable security engineering, especially when implementations
+PASETO uses versioned protocols, rather than in-band negotiation, to prevent
+insecure algorithms from being selected. Mix-and-match is not a robust 
+strategy for usable security engineering, especially when implementations
 have insecure default settings.
 
 If a severe security vulnerability is ever discovered in one of the specified
@@ -826,7 +983,7 @@ This prevents users from having to rewrite and/or reconfigure their
 implementations to side-step the vulnerability.
 
 PASETO implementors should only support the two most recent protocol versions
-(currently **v1** and **v2**) at any given time.
+(currently **PASETO Version 3** and **PASETO Version 4**) at any given time.
 
 PASETO users should beware that, although footers are authenticated, they are
 never encrypted. Therefore, sensitive information **MUST NOT** be stored in a
@@ -849,13 +1006,8 @@ The use of userspace pseudo-random number generators, even if seeded by the
 operating system's cryptographically secure pseudo-random number generator, is
 discouraged.
 
-Implementors should use some means of identifying different key types so that
-they cannot be used in the wrong context. Encapsulating each key in a different
-class and type-hinting checking that:
-
-* Only symmetric cryptography keys are used for decrypting *local* tokens
-* Only asymmetric cryptography public keys are used for verifying *public*
-  tokens
+Implementors **MUST NOT** skip steps, although they **MAY** implement multiple
+steps in a single code statement.
 
 # IANA Considerations
 
@@ -865,7 +1017,7 @@ document and superseding RFCs.
 This document defines a suite of string prefixes for PASETO tokens, called
 "PASETO Headers" (see (#paseto-message-format)), which consists of two parts:
 
-* **version**, with values **v1**, **v2** defined above
+* **version**, with values **v3**, **v4** defined above
 * **purpose**, with the values of **local** or **public**
 
 These two values are concatenated with a single character separator, the ASCII
@@ -877,11 +1029,25 @@ assignments are to be made through Expert Review [@!RFC8126], such as the
 
 | Value     | PASETO Header Meaning | Definition  |
 | --------- | --------------------- | ----------- |
-| v1.local  | Version 1, local      | (#v1local)  |
-| v1.public | Version 1, public     | (#v1public) |
-| v2.local  | Version 2, local      | (#v2local)  |
-| v2.public | Version 2, public     | (#v2public) |
+| v3.local  | Version 3, local      | (#v3local)  |
+| v3.public | Version 3, public     | (#v3public) |
+| v4.local  | Version 4, local      | (#v4local)  |
+| v4.public | Version 4, public     | (#v4public) |
 Table: PASETO Headers and their respective meanings
+
+Additionally, the IANA should reserve a new "PASETO Claims" registry.
+
+| Value | PASETO Claim Meaning |
+| ----- | -------------------- |
+| iss   | Issuer               |
+| sub   | Subject              |
+| aud   | Audience             |
+| exp   | Expiration           |
+| nbf   | Not Before           |
+| iat   | Issued At            |
+| jti   | Token ID             |
+| kid   | Key ID               |
+| wpk   | Wrapped PASERK       |
 
 [CFRG]: https://irtf.org/cfrg "Crypto Forum Research Group"
 
@@ -889,343 +1055,480 @@ Table: PASETO Headers and their respective meanings
 
 # PASETO Test Vectors
 
-Note: When a nonce is given below, it refers to the value before being hashed
-with the message. Typically this value is provided by a secure random number
-generator.
+## PASETO v3 Test Vectors
 
-Note: Signing may result in a different token each time, but the given token and
-public key pair should validate successfully. The private key that corresponds
-to this public key is as follows:
+### v3.local (Shared-Key Encryption) Test Vectors
+
+#### Test Vector v3-E-1
 
 ~~~
------BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEAyaTgTt53ph3p5GHgwoGWwz5hRfWXSQA08NCOwe0FEgALWos9
-GCjNFCd723nCHxBtN1qd74MSh/uN88JPIbwxKheDp4kxo4YMN5trPaF0e9G6Bj1N
-02HnanxFLW+gmLbgYO/SZYfWF/M8yLBcu5Y1Ot0ZxDDDXS9wIQTtBE0ne3YbxgZJ
-AZTU5XqyQ1DxdzYyC5lF6yBaR5UQtCYTnXAApVRuUI2Sd6L1E2vl9bSBumZ5IpNx
-kRnAwIMjeTJB/0AIELh0mE5vwdihOCbdV6alUyhKC1+1w/FW6HWcp/JG1kKC8DPI
-idZ78Bbqv9YFzkAbNni5eSBOsXVBKG78Zsc8owIDAQABAoIBAF22jLDa34yKdns3
-qfd7to+C3D5hRzAcMn6Azvf9qc+VybEI6RnjTHxDZWK5EajSP4/sQ15e8ivUk0Jo
-WdJ53feL+hnQvwsab28gghSghrxM2kGwGA1XgO+SVawqJt8SjvE+Q+//01ZKK0Oy
-A0cDJjX3L9RoPUN/moMeAPFw0hqkFEhm72GSVCEY1eY+cOXmL3icxnsnlUD//SS9
-q33RxF2y5oiW1edqcRqhW/7L1yYMbxHFUcxWh8WUwjn1AAhoCOUzF8ZB+0X/PPh+
-1nYoq6xwqL0ZKDwrQ8SDhW/rNDLeO9gic5rl7EetRQRbFvsZ40AdsX2wU+lWFUkB
-42AjuoECgYEA5z/CXqDFfZ8MXCPAOeui8y5HNDtu30aR+HOXsBDnRI8huXsGND04
-FfmXR7nkghr08fFVDmE4PeKUk810YJb+IAJo8wrOZ0682n6yEMO58omqKin+iIUV
-rPXLSLo5CChrqw2J4vgzolzPw3N5I8FJdLomb9FkrV84H+IviPIylyECgYEA3znw
-AG29QX6ATEfFpGVOcogorHCntd4niaWCq5ne5sFL+EwLeVc1zD9yj1axcDelICDZ
-xCZynU7kDnrQcFkT0bjH/gC8Jk3v7XT9l1UDDqC1b7rm/X5wFIZ/rmNa1rVZhL1o
-/tKx5tvM2syJ1q95v7NdygFIEIW+qbIKbc6Wz0MCgYBsUZdQD+qx/xAhELX364I2
-epTryHMUrs+tGygQVrqdiJX5dcDgM1TUJkdQV6jLsKjPs4Vt6OgZRMrnuLMsk02R
-3M8gGQ25ok4f4nyyEZxGGWnVujn55KzUiYWhGWmhgp18UCkoYa59/Q9ss+gocV9h
-B9j9Q43vD80QUjiF4z0DQQKBgC7XQX1VibkMim93QAnXGDcAS0ij+w02qKVBjcHk
-b9mMBhz8GAxGOIu7ZJafYmxhwMyVGB0I1FQeEczYCJUKnBYN6Clsjg6bnBT/z5bJ
-x/Jx1qCzX3Uh6vLjpjc5sf4L39Tyye1u2NXQmZPwB5x9BdcsFConSq/s4K1LJtUT
-3KFxAoGBANGcQ8nObi3m4wROyKrkCWcWxFFMnpwxv0pW727Hn9wuaOs4UbesCnwm
-pcMTfzGUDuzYXCtAq2pJl64HG6wsdkWmjBTJEpm6b9ibOBN3qFV2zQ0HyyKlMWxI
-uVSj9gOo61hF7UH9XB6R4HRdlpBOuIbgAWZ46dkj9/HM9ovdP0Iy
------END RSA PRIVATE KEY-----
-~~~
-
-## PASETO v1 Test Vectors
-
-### v1.local (Shared-Key Encryption) Test Vectors
-
-#### Test Vector v1-E-1
-
-~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   00000000 00000000 00000000 00000000
-         00000000 00000000 00000000 00000000
-Payload: {"data":"this is a signed message",
-         "exp":"2019-01-01T00:00:00+00:00"}
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    00000000 00000000 00000000 00000000
+          00000000 00000000 00000000 00000000
+Payload:  {"data":"this is a secret message",
+          "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
-Token:   v1.local.WzhIh1MpbqVNXNt7-HbWvL-JwAym3Tomad9Pc2nl7wK87vGraUV
-         vn2bs8BBNo7jbukCNrkVID0jCK2vr5bP18G78j1bOTbBcP9HZzqnraEdspcj
-         d_PvrxDEhj9cS2MG5fmxtvuoHRp3M24HvxTtql9z26KTfPWxJN5bAJaAM6go
-         s8fnfjJO8oKiqQMaiBP_Cqncmqw8
+Token:    v3.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADbfcIURX_
+          0pVZVU1mAESUzrKZAsRm2EsD6yBoZYn6cpVZNzSJOhSDN-sRaWjfLU-yn9OJ
+          H1J_B8GKtOQ9gSQlb8yk9Iza7teRdkiR89ZFyvPPsVjjFiepFUVcMa-LP18z
+          V77f_crJrVXWa5PDNRkCSeHfBBeg
+Implicit: 
 ~~~
 
-#### Test Vector v1-E-2
+#### Test Vector v3-E-2
 
-Same as v1-E-1, but with a slightly different message.
+Same as v3-E-1, but with a slightly different message.
 
 ~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   00000000 00000000 00000000 00000000
-         00000000 00000000 00000000 00000000
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    00000000 00000000 00000000 00000000
+          00000000 00000000 00000000 00000000
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:
+Token:    v3.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADbfcIURX_
+          0pVZVU1mAESUzrKZAqhWxBMDgyBoZYn6cpVZNzSJOhSDN-sRaWjfLU-yn9OJ
+          H1J_B8GKtOQ9gSQlb8yk9IzZfaZpReVpHlDSwfuygx1riVXYVs-UjcrG_apl
+          9oz3jCVmmJbRuKn5ZfD8mHz2db0A
+Implicit: 
+~~~
+
+#### Test Vector v3-E-3
+
+~~~
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    26f75533 54482a1d 91d47846 27854b8d
+          a6b8042a 7966523c 2b404e8d bbe7f7f2
 Payload: {"data":"this is a secret message",
-         "exp":"2019-01-01T00:00:00+00:00"}
+         "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
-Token:   v1.local.w_NOpjgte4bX-2i1JAiTQzHoGUVOgc2yqKqsnYGmaPaCu_KWUkR
-         GlCRnOvZZxeH4HTykY7AE_jkzSXAYBkQ1QnwvKS16uTXNfnmp8IRknY76I2m
-         3S5qsM8klxWQQKFDuQHl8xXV0MwAoeFh9X6vbwIqrLlof3s4PMjRDwKsxYzk
-         Mr1RvfDI8emoPoW83q4Q60_xpHaw
+Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnD
+          ait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdE
+          K5SDvl02_HjWKJW2oqGMOQJlxnt5xyhQjFJomwnt7WW_7r2VT0G704ifult0
+          11-TgLCyQ2X8imQhniG_hAQ4BydM
+Implicit: 
 ~~~
 
-#### Test Vector v1-E-3
+#### Test Vector v3-E-4
+
+Same as v3-E-3, but with a slightly different message.
 
 ~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   26f75533 54482a1d 91d47846 27854b8d
-         a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload: {"data":"this is a signed message",
-         "exp":"2019-01-01T00:00:00+00:00"}
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    26f75533 54482a1d 91d47846 27854b8d
+          a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
-Token:   v1.local.4VyfcVcFAOAbB8yEM1j1Ob7Iez5VZJy5kHNsQxmlrAwKUbOtq9c
-         v39T2fC0MDWafX0nQJ4grFZzTdroMvU772RW-X1oTtoFBjsl_3YYHWnwgqzs
-         0aFc3ejjORmKP4KUM339W3syBYyjKIOeWnsFQB6Yef-1ov9rvqt7TmwONUHe
-         JUYk4IK_JEdUeo_uFRqAIgHsiGCg
+Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnD
+          ait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdE
+          K5SDvl02_HjWKJW2oqGMOQJlBZa_gOpVj4gv0M9lV6Pwjp8JS_MmaZaTA1LL
+          TULXybOBZ2S4xMbYqYmDRhh3IgEk
+Implicit: 
 ~~~
 
-#### Test Vector v1-E-4
-
-Same as v1-E-3, but with a slightly different message.
+#### Test Vector v3-E-5
 
 ~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   26f75533 54482a1d 91d47846 27854b8d
-         a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload: {"data":"this is a secret message",
-         "exp":"2019-01-01T00:00:00+00:00"}
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    26f75533 54482a1d 91d47846 27854b8d
+          a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:  {"data":"this is a secret message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
+Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnD
+          ait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdE
+          K5SDvl02_HjWKJW2oqGMOQJlkYSIbXOgVuIQL65UMdW9WcjOpmqvjqD40NNz
+          ed-XPqn1T3w-bJvitYpUJL_rmihc.eyJraWQiOiJVYmtLOFk2aXY0R1poRnA
+          2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Implicit: 
+~~~
+
+#### Test Vector v3-E-6
+
+Same as v3-E-5, but with a slightly different message.
+
+~~~
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    26f75533 54482a1d 91d47846 27854b8d
+          a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
+Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQn
+          Dait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRs
+          dEK5SDvl02_HjWKJW2oqGMOQJmSeEMphEWHiwtDKJftg41O1F8Hat-8kQ82
+          ZIAMFqkx9q5VkWlxZke9ZzMBbb3Znfo.eyJraWQiOiJVYmtLOFk2aXY0R1p
+          oRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Implicit: 
+~~~
+
+#### Test Vector v3-E-7
+
+~~~
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    26f75533 54482a1d 91d47846 27854b8d
+          a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:  {"data":"this is a secret message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
+Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQn
+          Dait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRs
+          dEK5SDvl02_HjWKJW2oqGMOQJkzWACWAIoVa0bz7EWSBoTEnS8MvGBYHHo6
+          t6mJunPrFR9JKXFCc0obwz5N-pxFLOc.eyJraWQiOiJVYmtLOFk2aXY0R1p
+          oRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Implicit: {"test-vector":"3-E-7"} 
+~~~
+
+#### Test Vector v3-E-8
+
+Same as v3-E-7, but with a slightly different message and implicit assertion.
+
+~~~
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    26f75533 54482a1d 91d47846 27854b8d
+          a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
+Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQn
+          Dait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRs
+          dEK5SDvl02_HjWKJW2oqGMOQJmZHSSKYR6AnPYJV6gpHtx6dLakIG_AOPhu
+          8vKexNyrv5_1qoom6_NaPGecoiz6fR8.eyJraWQiOiJVYmtLOFk2aXY0R1p
+          oRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Implicit: {"test-vector":"3-E-8"}
+~~~
+
+#### Test Vector v3-E-9
+
+~~~
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    26f75533 54482a1d 91d47846 27854b8d
+          a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   arbitrary-string-that-isn't-json
+Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQn
+          Dait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRs
+          dEK5SDvl02_HjWKJW2oqGMOQJlk1nli0_wijTH_vCuRwckEDc82QWK8-lG2
+          fT9wQF271sgbVRVPjm0LwMQZkvvamqU.YXJiaXRyYXJ5LXN0cmluZy10aGF
+          0LWlzbid0LWpzb24
+Implicit: {"test-vector":"3-E-9"}
+~~~
+
+### v3.public (Public-Key Authentication) Test Vectors
+
+#### Test Vector v3-S-1
+
+~~~
+Token:       v3.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwi
+             ZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9qqEwwrKHKi5lJ7
+             b9MBKc0G4MGZy0ptUiMv3lAUAaz-JY_zjoqBSIxMxhfAoeNYiSyvfUErj7
+             6KOPWm1OeNnBPkTSespeSXDGaDfxeIrl3bRrPEIy7tLwLAIsRzsXkfph
+Secret key:  -----BEGIN EC PRIVATE KEY-----
+             MIGkAgEBBDAgNHYJYHR3rKj7+8XmIYRV8xmWaXku+LRm+qh73Gd5gUTISN
+             0DZh7tWsYkYTQM6pagBwYFK4EEACKhZANiAAT7y3xp7hxgV5vnozQTSHjZ
+             xcW/NdVS2rY8AUA5ftFM72N9dyCSXERpnqMOcodMcvt8kgcrB8KcKee0HU
+             23E79/s4CvEs8hBfnjSUd/gcAm08EjSIz06iWjrNy4NakxR3I=
+             -----END EC PRIVATE KEY-----
+Public Key:  -----BEGIN PUBLIC KEY-----
+             MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+8t8ae4cYFeb56M0E0h42cXFvz
+             XVUtq2PAFAOX7RTO9jfXcgklxEaZ6jDnKHTHL7fJIHKwfCnCnntB1NtxO/
+             f7OArxLPIQX540lHf4HAJtPBI0iM9Oolo6zcuDWpMUdy
+             -----END PUBLIC KEY-----
+Payload:     {"data":"this is a signed message",
+             "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
-Token:   v1.local.IddlRQmpk6ojcD10z1EYdLexXvYiadtY0MrYQaRnq3dnqKIWcbb
-         pOcgXdMIkm3_3gksirTj81bvWrWkQwcUHilt-tQo7LZK8I6HCK1V78B9YeEq
-         GNeeWXOyWWHoJQIe0d5nTdvejdt2Srz_5Q0QG4oiz1gB_wmv4U5pifedaZbH
-         XUTWXchFEi0etJ4u6tqgxZSklcec
+Implicit:
 ~~~
 
-#### Test Vector v1-E-5
+#### Test Vector v3-S-2
 
 ~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   26f75533 54482a1d 91d47846 27854b8d
-         a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload: {"data":"this is a signed message",
-         "exp":"2019-01-01T00:00:00+00:00"}
-Footer:  {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
-Token:   v1.local.4VyfcVcFAOAbB8yEM1j1Ob7Iez5VZJy5kHNsQxmlrAwKUbOtq9c
-         v39T2fC0MDWafX0nQJ4grFZzTdroMvU772RW-X1oTtoFBjsl_3YYHWnwgqzs
-         0aFc3ejjOR mKP4KUM339W3szA28OabR192eRqiyspQ6xPM35NMR-04-FhRJ
-         ZEWiF0W5oWjPVtGPjeVjm2DI4YtJg.eyJraWQiOiJVYmtLOFk2aXY0R1poRn
-         A2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Token:       v3.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwi
+             ZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9ZWrbGZ6L0MDK72
+             skosUaS0Dz7wJ_2bMcM6tOxFuCasO9GhwHrvvchqgXQNLQQyWzGC2wkr-V
+             KII71AvkLpC8tJOrzJV1cap9NRwoFzbcXjzMZyxQ0wkshxZxx8ImmNWP.e
+             yJraWQiOiJkWWtJU3lseFFlZWNFY0hFTGZ6Rjg4VVpyd2JMb2xOaUNkcHp
+             VSEd3OVVxbiJ9
+Secret key:  -----BEGIN EC PRIVATE KEY-----
+             MIGkAgEBBDAgNHYJYHR3rKj7+8XmIYRV8xmWaXku+LRm+qh73Gd5gUTISN
+             0DZh7tWsYkYTQM6pagBwYFK4EEACKhZANiAAT7y3xp7hxgV5vnozQTSHjZ
+             xcW/NdVS2rY8AUA5ftFM72N9dyCSXERpnqMOcodMcvt8kgcrB8KcKee0HU
+             23E79/s4CvEs8hBfnjSUd/gcAm08EjSIz06iWjrNy4NakxR3I=
+             -----END EC PRIVATE KEY-----
+Public Key:  -----BEGIN PUBLIC KEY-----
+             MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+8t8ae4cYFeb56M0E0h42cXFvz
+             XVUtq2PAFAOX7RTO9jfXcgklxEaZ6jDnKHTHL7fJIHKwfCnCnntB1NtxO/
+             f7OArxLPIQX540lHf4HAJtPBI0iM9Oolo6zcuDWpMUdy
+             -----END PUBLIC KEY-----
+Payload:     {"data":"this is a signed message",
+             "exp":"2022-01-01T00:00:00+00:00"}
+Footer:      {"kid":"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn"}
+Implicit:
 ~~~
 
-#### Test Vector v1-E-6
-
-Same as v1-E-5, but with a slightly different message.
+#### Test Vector v3-S-3
 
 ~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   26f75533 54482a1d 91d47846 27854b8d
-         a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload: {"data":"this is a secret message",
-         "exp":"2019-01-01T00:00:00+00:00"}
-Footer:  {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
-Token:   v1.local.IddlRQmpk6ojcD10z1EYdLexXvYiadtY0MrYQaRnq3dnqKIWcbb
-         pOcgXdMIkm3_3gksirTj81bvWrWkQwcUHilt-tQo7LZK8I6HCK1V78B9YeEq
-         GNeeWXOyWWHoJQIe0d5nTdvcT2vnER6NrJ7xIowvFba6J4qMlFhBnYSxHEq9
-         v9NlzcKsz1zscdjcAiXnEuCHyRSc.eyJraWQiOiJVYmtLOFk2aXY0R1poRnA
-         2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Token:       v3.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwi
+             ZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ94SjWIbjmS7715G
+             jLSnHnpJrC9Z-cnwK45dmvnVvCRQDCCKAXaKEopTajX0DKYx1Xqr6gcTdf
+             qscLCAbiB4eOW9jlt-oNqdG8TjsYEi6aloBfTzF1DXff_45tFlnBukEX.e
+             yJraWQiOiJkWWtJU3lseFFlZWNFY0hFTGZ6Rjg4VVpyd2JMb2xOaUNkcHp
+             VSEd3OVVxbiJ9
+Secret key:  -----BEGIN EC PRIVATE KEY-----
+             MIGkAgEBBDAgNHYJYHR3rKj7+8XmIYRV8xmWaXku+LRm+qh73Gd5gUTISN
+             0DZh7tWsYkYTQM6pagBwYFK4EEACKhZANiAAT7y3xp7hxgV5vnozQTSHjZ
+             xcW/NdVS2rY8AUA5ftFM72N9dyCSXERpnqMOcodMcvt8kgcrB8KcKee0HU
+             23E79/s4CvEs8hBfnjSUd/gcAm08EjSIz06iWjrNy4NakxR3I=
+             -----END EC PRIVATE KEY-----
+Public Key:  -----BEGIN PUBLIC KEY-----
+             MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+8t8ae4cYFeb56M0E0h42cXFvz
+             XVUtq2PAFAOX7RTO9jfXcgklxEaZ6jDnKHTHL7fJIHKwfCnCnntB1NtxO/
+             f7OArxLPIQX540lHf4HAJtPBI0iM9Oolo6zcuDWpMUdy
+             -----END PUBLIC KEY-----
+Payload:     {"data":"this is a signed message",
+             "exp":"2022-01-01T00:00:00+00:00"}
+Footer:      {"kid":"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn"}
+Implicit:    {"test-vector":"3-S-3"}
 ~~~
 
-### v1.public (Public-Key Authentication) Test Vectors
+## PASETO v4 Test Vectors
 
-#### Test Vector v1-S-1
+### v4.local (Shared-Key Encryption) Test Vectors
+
+#### Test Vector v4-E-1
 
 ~~~
-Token:      v1.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiw
-            iZXhwIjoiMjAxOS0wMS0wMVQwMDowMDowMCswMDowMCJ9cIZKahKeGM5k
-            iAS_4D70Qbz9FIThZpxetJ6n6E6kXP_119SvQcnfCSfY_gG3D0Q2v7FEt
-            m2Cmj04lE6YdgiZ0RwA41WuOjXq7zSnmmHK9xOSH6_2yVgt207h1_LphJ
-            zVztmZzq05xxhZsV3nFPm2cCu8oPceWy-DBKjALuMZt_Xj6hWFFie96Sf
-            Q6i85lOsTX8Kc6SQaG-3CgThrJJ6W9DC-YfQ3lZ4TJUoY3QNYdtEgAvp1
-            QuWWK6xmIb8BwvkBPej5t88QUb7NcvZ15VyNw3qemQGn2ITSdpdDgwMtp
-            flZOeYdtuxQr1DSGO2aQyZl7s0WYn1IjdQFx6VjSQ4yfw
-Public Key: -----BEGIN PUBLIC KEY-----
-            MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyaTgTt53ph3p
-            5GHgwoGWwz5hRfWXSQA08NCOwe0FEgALWos9GCjNFCd723nCHxBtN1qd
-            74MSh/uN88JPIbwxKheDp4kxo4YMN5trPaF0e9G6Bj1N02HnanxFLW+g
-            mLbgYO/SZYfWF/M8yLBcu5Y1Ot0ZxDDDXS9wIQTtBE0ne3YbxgZJAZTU
-            5XqyQ1DxdzYyC5lF6yBaR5UQtCYTnXAApVRuUI2Sd6L1E2vl9bSBumZ5
-            IpNxkRnAwIMjeTJB/0AIELh0mE5vwdihOCbdV6alUyhKC1+1w/FW6HWc
-            p/JG1kKC8DPIidZ78Bbqv9YFzkAbNni5eSBOsXVBKG78Zsc8owIDAQAB
-            -----END PUBLIC KEY-----
-Payload:    {"data":"this is a signed message",
-            "exp":"2019-01-01T00:00:00+00:00"}
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    00000000 00000000 00000000 00000000
+          00000000 00000000 00000000 00000000
+Payload:  {"data":"this is a secret message",
+          "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
+Token:    v4.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAr68PS4
+          AXe7If_ZgesdkUMvSwscFlAl1pk5HC0e8kApeaqMfGo_7OpBnwJOAbY9V7WU
+          6abu74MmcUE8YWAiaArVI8XJ5hOb_4v9RmDkneN0S92dx0OW4pgy7omxgf3S
+          8c3LlQg
+Implicit: 
 ~~~
 
-#### Test Vector v1-S-2
+#### Test Vector v4-E-2
+
+Same as v4-E-1, but with a slightly different message.
 
 ~~~
-Token:      v1.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiw
-            iZXhwIjoiMjAxOS0wMS0wMVQwMDowMDowMCswMDowMCJ9sBTIb0J_4mis
-            AuYc4-6P5iR1rQighzktpXhJ8gtrrp2MqSSDkbb8q5WZh3FhUYuW_rg2X
-            8aflDlTWKAqJkM3otjYwtmfwfOhRyykxRL2AfmIika_A-_MaLp9F0iw4S
-            1JetQQDV8GUHjosd87TZ20lT2JQLhxKjBNJSwWue8ucGhTgJcpOhXcthq
-            az7a2yudGyd0layzeWziBhdQpoBR6ryTdtIQX54hP59k3XCIxuYbB9qJM
-            pixiPAEKBcjHT74sA-uukug9VgKO7heWHwJL4Rl9ad21xyNwaxAnwAJ7C
-            0fN5oGv8Rl0dF11b3tRmsmbDoIokIM0Dba29x_T3YzOyg.eyJraWQiOiJ
-            kWWtJU3lseFFlZWNFY0hFTGZ6Rjg4VVpyd2JMb2xOaUNkcHpVSEd3OVVx
-            biJ9
-Public Key: -----BEGIN PUBLIC KEY-----
-            MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyaTgTt53ph3p
-            5GHgwoGWwz5hRfWXSQA08NCOwe0FEgALWos9GCjNFCd723nCHxBtN1qd
-            74MSh/uN88JPIbwxKheDp4kxo4YMN5trPaF0e9G6Bj1N02HnanxFLW+g
-            mLbgYO/SZYfWF/M8yLBcu5Y1Ot0ZxDDDXS9wIQTtBE0ne3YbxgZJAZTU
-            5XqyQ1DxdzYyC5lF6yBaR5UQtCYTnXAApVRuUI2Sd6L1E2vl9bSBumZ5
-            IpNxkRnAwIMjeTJB/0AIELh0mE5vwdihOCbdV6alUyhKC1+1w/FW6HWc
-            p/JG1kKC8DPIidZ78Bbqv9YFzkAbNni5eSBOsXVBKG78Zsc8owIDAQAB
-            -----END PUBLIC KEY-----
-Payload:    {"data":"this is a signed message",
-            "exp":"2019-01-01T00:00:00+00:00"}
-Footer:     {"kid":"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn"}
-~~~
-
-## PASETO v2 Test Vectors
-
-### v2.local (Shared-Key Encryption) Test Vectors
-
-#### Test Vector v2-E-1
-
-~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   00000000 00000000 00000000 00000000
-         00000000 00000000
-Payload: {"data":"this is a signed message",
-         "exp":"2019-01-01T00:00:00+00:00"}
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    00000000 00000000 00000000 00000000
+          00000000 00000000 00000000 00000000
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
-Token:   v2.local.97TTOvgwIxNGvV80XKiGZg_kD3tsXM_-qB4dZGHOeN1cTkgQ4Pn
-         W8888l802W8d9AvEGnoNBY3BnqHORy8a5cC8aKpbA0En8XELw2yDk2f1sVOD
-         yfnDbi6rEGMY3pSfCbLWMM2oHJxvlEl2XbQ
-~~~
-
-#### Test Vector v2-E-2
-
-Same as v2-E-1, but with a slightly different message.
-
-~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   00000000 00000000 00000000 00000000
-         00000000 00000000
-Payload: {"data":"this is a secret message",
-         "exp":"2019-01-01T00:00:00+00:00"}
-Footer:
-Token:   v2.local.CH50H-HM5tzdK4kOmQ8KbIvrzJfjYUGuu5Vy9ARSFHy9owVDMYg
-         3-8rwtJZQjN9ABHb2njzFkvpr5cOYuRyt7CRXnHt42L5yZ7siD-4l-FoNsC7
-         J2OlvLlIwlG06mzQVunrFNb7Z3_CHM0PK5w
+Token:    v4.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAr68PS4
+          AXe7If_ZgesdkUMvS2csCgglvpk5HC0e8kApeaqMfGo_7OpBnwJOAbY9V7WU
+          6abu74MmcUE8YWAiaArVI8XIemu9chy3WVKvRBfg6t8wwYHK0ArLxxfZP73W
+          _vfwt5A
+Implicit: 
 ~~~
 
 #### Test Vector v2-E-3
 
 ~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   45742c97 6d684ff8 4ebdc0de 59809a97
-         cda2f64c 84fda19b
-Payload: {"data":"this is a signed message",
-         "exp":"2019-01-01T00:00:00+00:00"}
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    df654812 bac49266 3825520b a2f6e67c
+          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:  {"data":"this is a secret message",
+          "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
-Token:   v2.local.5K4SCXNhItIhyNuVIZcwrdtaDKiyF81-eWHScuE0idiVqCo72bb
-         jo07W05mqQkhLZdVbxEa5I_u5sgVk1QLkcWEcOSlLHwNpCkvmGGlbCdNExn6
-         Qclw3qTKIIl5-O5xRBN076fSDPo5xUCPpBA
+Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
+          tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
+          P-PRdoHjd5-RHCiExR1IK6t6-tyebyWG6Ov7kKvBdkrrAJ837lKP3iDag2hz
+          UPHuMKA
+Implicit:
 ~~~
 
-#### Test Vector v2-E-4
+#### Test Vector v4-E-4
 
-Same as v2-E-3, but with a slightly different message.
+Same as v4-E-3, but with a slightly different message.
 
 ~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   45742c97 6d684ff8 4ebdc0de 59809a97
-         cda2f64c 84fda19b
-Payload: {"data":"this is a secret message",
-         "exp":"2019-01-01T00:00:00+00:00"}
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    df654812 bac49266 3825520b a2f6e67c
+          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
-Token:   v2.local.pvFdDeNtXxknVPsbBCZF6MGedVhPm40SneExdClOxa9HNR8wFv7
-         cu1cB0B4WxDdT6oUc2toyLR6jA6sc-EUM5ll1EkeY47yYk6q8m1RCpqTIzUr
-         Iu3B6h232h62DPbIxtjGvNRAwsLK7LcV8oQ
+Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
+          tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
+          P-PRdoHjd5-RHCiExR1IK6t4gt6TiLm55vIH8c_lGxxZpE3AWlH4WTR0v45n
+          sWoU3gQ
+Implicit:
 ~~~
 
-#### Test Vector v2-E-5
+#### Test Vector v4-E-5
 
 ~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   45742c97 6d684ff8 4ebdc0de 59809a97
-         cda2f64c 84fda19b
-Payload: {"data":"this is a signed message",
-         "exp":"2019-01-01T00:00:00+00:00"}
-Footer:  {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
-Token:   v2.local.5K4SCXNhItIhyNuVIZcwrdtaDKiyF81-eWHScuE0idiVqCo72bb
-         jo07W05mqQkhLZdVbxEa5I_u5sgVk1QLkcWEcOSlLHwNpCkvmGGlbCdNExn6
-         Qclw3qTKIIl5-zSLIrxZqOLwcFLYbVK1SrQ.eyJraWQiOiJ6VmhNaVBCUDlm
-         UmYyc25FY1Q3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    df654812 bac49266 3825520b a2f6e67c
+          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:  {"data":"this is a secret message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
+          tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
+          P-PRdoHjd5-RHCiExR1IK6t4x-RMNXtQNbz7FvFZ_G-lFpk5RG3EOrwDL6Cg
+          DqcerSQ.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NO
+          eTlEZmdMMVc2MGhhTiJ9
+Implicit:
 ~~~
 
-#### Test Vector v2-E-6
+#### Test Vector v4-E-6
 
-Same as v2-E-5, but with a slightly different message.
-
-~~~
-Key:     70717273 74757677 78797a7b 7c7d7e7f
-         80818283 84858687 88898a8b 8c8d8e8f
-Nonce:   45742c97 6d684ff8 4ebdc0de 59809a97
-         cda2f64c 84fda19b
-Payload: {"data":"this is a secret message",
-         "exp":"2019-01-01T00:00:00+00:00"}
-Footer:  {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
-Token:   v2.local.pvFdDeNtXxknVPsbBCZF6MGedVhPm40SneExdClOxa9HNR8wFv7
-         cu1cB0B4WxDdT6oUc2toyLR6jA6sc-EUM5ll1EkeY47yYk6q8m1RCpqTIzUr
-         Iu3B6h232h62DnMXKdHn_Smp6L_NfaEnZ-A.eyJraWQiOiJ6VmhNaVBCUDlm
-         UmYyc25FY1Q3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
-~~~
-
-### v2.public (Public-Key Authentication) Test Vectors
-
-#### Test Vector v2-S-1
+Same as v4-E-5, but with a slightly different message.
 
 ~~~
-Token:       v2.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIi
-             wiZXhwIjoiMjAxOS0wMS0wMVQwMDowMDowMCswMDowMCJ9HQr8URrGnt
-             Tu7Dz9J2IF23d1M7-9lH9xiqdGyJNvzp4angPW5Esc7C5huy_M8I8_Dj
-             JK2ZXC2SUYuOFM-Q_5Cw
-Private Key: b4cbfb43 df4ce210 727d953e 4a713307
-             fa19bb7d 9f850414 38d9e11b 942a3774
-             1eb9dbbb bc047c03 fd70604e 0071f098
-             7e16b28b 757225c1 1f00415d 0e20b1a2
-Public Key:  1eb9dbbb bc047c03 fd70604e 0071f098
-             7e16b28b 757225c1 1f00415d 0e20b1a2
-Payload:     {"data":"this is a signed message",
-             "exp":"2019-01-01T00:00:00+00:00"}
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    df654812 bac49266 3825520b a2f6e67c
+          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
+          tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
+          P-PRdoHjd5-RHCiExR1IK6t6pWSA5HX2wjb3P-xLQg5K5feUCX4P2fpVK3ZL
+          WFbMSxQ.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NO
+          eTlEZmdMMVc2MGhhTiJ9
+Implicit:
+~~~
+
+#### Test Vector v4-E-7
+
+~~~
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    df654812 bac49266 3825520b a2f6e67c
+          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:  {"data":"this is a secret message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
+          tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
+          P-PRdoHjd5-RHCiExR1IK6t40KCCWLA7GYL9KFHzKlwY9_RnIfRrMQpueydL
+          EAZGGcA.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NO
+          eTlEZmdMMVc2MGhhTiJ9
+Implicit: {"test-vector":"4-E-7"}
+~~~
+
+#### Test Vector v4-E-8
+
+Same as v4-E-7, but with a slightly different message and implicit assertion.
+
+~~~
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    df654812 bac49266 3825520b a2f6e67c
+          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
+          tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
+          P-PRdoHjd5-RHCiExR1IK6t5uvqQbMGlLLNYBc7A6_x7oqnpUK5WLvj24eE4
+          DVPDZjw.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NO
+          eTlEZmdMMVc2MGhhTiJ9
+Implicit: {"test-vector":"4-E-8"}
+~~~
+
+#### Test Vector v4-E-9
+
+~~~
+Key:      70717273 74757677 78797a7b 7c7d7e7f
+          80818283 84858687 88898a8b 8c8d8e8f
+Nonce:    df654812 bac49266 3825520b a2f6e67c
+          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:  {"data":"this is a hidden message",
+          "exp":"2022-01-01T00:00:00+00:00"}
+Footer:   arbitrary-string-that-isn't-json
+Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
+          tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
+          P-PRdoHjd5-RHCiExR1IK6t6tybdlmnMwcDMw0YxA_gFSE_IUWl78aMtOepF
+          YSWYfQA.YXJiaXRyYXJ5LXN0cmluZy10aGF0LWlzbid0LWpzb24
+Implicit: {"test-vector":"4-E-9"}
+~~~
+
+### v4.public (Public-Key Authentication) Test Vectors
+
+#### Test Vector v4-S-1
+
+~~~
+Token:      v4.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwi
+            ZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9bg_XBBzds8lTZS
+            hVlwwKSgeKpLT3yukTw6JUz3W4h_ExsQV-P0V54zemZDcAxFaSeef1QlXE
+            FtkqxT1ciiQEDA
+Secret Key: b4cbfb43 df4ce210 727d953e 4a713307
+            fa19bb7d 9f850414 38d9e11b 942a3774
+            1eb9dbbb bc047c03 fd70604e 0071f098
+            7e16b28b 757225c1 1f00415d 0e20b1a2
+Public Key: 1eb9dbbb bc047c03 fd70604e 0071f098
+            7e16b28b 757225c1 1f00415d 0e20b1a2
+Payload:    {"data":"this is a signed message",
+            "exp":"2022-01-01T00:00:00+00:00"}
 Footer:
+Implicit:
 ~~~
 
-#### Test Vector v2-S-2
+#### Test Vector v4-S-2
 
 ~~~
-Token:       v2.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIi
-             wiZXhwIjoiMjAxOS0wMS0wMVQwMDowMDowMCswMDowMCJ9flsZsx_gYC
-             R0N_Ec2QxJFFpvQAs7h9HtKwbVK2n1MJ3Rz-hwe8KUqjnd8FAnIJZ601
-             tp7lGkguU63oGbomhoBw.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q
-             3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
-Private Key: b4cbfb43 df4ce210 727d953e 4a713307
-             fa19bb7d 9f850414 38d9e11b 942a3774
-             1eb9dbbb bc047c03 fd70604e 0071f098
-             7e16b28b 757225c1 1f00415d 0e20b1a2
-Public Key:  1eb9dbbb bc047c03 fd70604e 0071f098
-             7e16b28b 757225c1 1f00415d 0e20b1a2
-Payload:     {"data":"this is a signed message",
-             "exp":"2019-01-01T00:00:00+00:00"}
-Footer:      {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Token:      v4.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwi
+            ZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9v3Jt8mx_TdM2ce
+            TGoqwrh4yDFn0XsHvvV_D0DtwQxVrJEBMl0F2caAdgnpKlt4p7xBnx1HcO
+            -SPo8FPp214HDw.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9
+            lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Secret Key: b4cbfb43 df4ce210 727d953e 4a713307
+            fa19bb7d 9f850414 38d9e11b 942a3774
+            1eb9dbbb bc047c03 fd70604e 0071f098
+            7e16b28b 757225c1 1f00415d 0e20b1a2
+Public Key: 1eb9dbbb bc047c03 fd70604e 0071f098
+            7e16b28b 757225c1 1f00415d 0e20b1a2
+Payload:    {"data":"this is a signed message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Implicit:
+~~~
+
+#### Test Vector v4-S-3
+
+~~~
+Token:      v4.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwi
+            ZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9NPWciuD3d0o5eX
+            JXG5pJy-DiVEoyPYWs1YSTwWHNJq6DZD3je5gf-0M4JR9ipdUSJbIovzmB
+            ECeaWmaqcaP0DQ.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9
+            lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Secret Key: b4cbfb43 df4ce210 727d953e 4a713307
+            fa19bb7d 9f850414 38d9e11b 942a3774
+            1eb9dbbb bc047c03 fd70604e 0071f098
+            7e16b28b 757225c1 1f00415d 0e20b1a2
+Public Key: 1eb9dbbb bc047c03 fd70604e 0071f098
+            7e16b28b 757225c1 1f00415d 0e20b1a2
+Payload:    {"data":"this is a signed message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Implicit:   {"test-vector":"4-S-3"}
 ~~~
