@@ -1,5 +1,5 @@
 FORMATS := html txt
-TARGETS := $(foreach ext,$(FORMATS),draft-paragon-paseto-rfc-01.$(ext))
+TARGETS := $(foreach ext,$(FORMATS),draft-paragon-paseto-rfc-02.$(ext))
 
 .PHONY: all clean publish
 all: $(TARGETS)
@@ -16,7 +16,7 @@ draft-paragon-paseto-rfc-02.xml: paseto.md
 	mmark $< > $@
 
 %.txt: %.xml
-	xml2rfc --v2 --text $<
+	xml2rfc --text $<
 
 %.html: %.xml
-	xml2rfc --v2 --html $<
+	xml2rfc --html $<
