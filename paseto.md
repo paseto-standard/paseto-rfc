@@ -10,7 +10,7 @@ date = 2022-05-24T16:00:00Z
 
 [seriesInfo]
 name = "Internet-Draft"
-value = "draft-paragon-paseto-rfc-02"
+value = "draft-paragon-paseto-rfc-01"
 stream = "IETF"
 status = "informational"
 
