@@ -1,39 +1,49 @@
-% title = "PASETO: Platform-Agnostic SEcurity TOkens"
-% abbr = "PASETO"
-% category = "info"
-% docname = "draft-paragon-paseto-rfc-02"
-% workgroup = "(No Working Group)"
-% keyword = ["security", "token"]
-%
-% date = 2021-09-08T16:00:00Z
-%
-% [[author]]
-% initials="S."
-% surname="Arciszewski"
-% fullname="Scott Arciszewski"
-% organization="Paragon Initiative Enterprises"
-%   [author.address]
-%   email = "security@paragonie.com"
-%   [author.address.postal]
-%   country = "United States"
-% [[author]]
-% initials="S."
-% surname="Haussmann"
-% fullname="Steven Haussmann"
-% organization="Rensselaer Polytechnic Institute"
-%   [author.address]
-%   email = "hausss@rpi.edu"
-%   [author.address.postal]
-%   country = "United States"
-% [[author]]
-% initials="R."
-% surname="Terjesen"
-% fullname="Robyn Terjesen"
-% organization="Paragon Initiative Enterprises"
-%   [author.address]
-%   email = "robyn@paragonie.com"
-%   [author.address.postal]
-%   country = "United States"
+%%%
+title = "PASETO (Platform-Agnostic SEcurity TOkens)"
+abbrev = "PASETO"
+ipr = "trust200902"
+updates = []
+area = "Internet"
+workgroup = ""
+keyword = ["security", "token"]
+date = 2022-05-24T16:00:00Z
+
+[seriesInfo]
+name = "Internet-Draft"
+value = "draft-paragon-paseto-rfc-02"
+stream = "IETF"
+status = "informational"
+
+[[author]]
+initials = "R."
+surname = "Terjesen"
+fullname = "Robyn Terjesen"
+organization = "Paragon Initiative Enterprises"
+    [author.address]
+    email = "robyn@paragonie.com"
+    [author.address.postal]
+    country = "United States"
+
+[[author]]
+initials = "S."
+surname = "Haussmann"
+fullname = "Steven Haussmann"
+organization = "Rensselaer Polytechnic Institute"
+    [author.address]
+    email = "hausss@rpi.edu"
+    [author.address.postal]
+    country = "United States"
+
+[[author]]
+initials = "S."
+surname = "Arciszewski"
+fullname = "Scott Arciszewski"
+organization = "Paragon Initiative Enterprises"
+    [author.address]
+    email = "security@paragonie.com"
+    [author.address.postal]
+    country = "United States"
+%%%
 
 .# Abstract
 
@@ -90,13 +100,13 @@ character whose number, represented in hexadecimal, is 2E).
 
 Without the Optional Footer:
 
-~~~
+~~~ text
 version.purpose.payload
 ~~~
 
 With the Optional Footer:
 
-~~~
+~~~ text
 version.purpose.payload.footer
 ~~~
 
@@ -142,9 +152,9 @@ In this document. `b64()` refers to this unpadded variant of base64url.
 
 ## Multi-Part Authentication
 
-Multi-part messages (e.g. header, content, footer) are encoded in a specific
-manner before being passed to the appropriate cryptographic function, to prevent
-canonicalization attacks.
+Multi-part messages (e.g. header, content, footer, implicit) are encoded in
+a specific manner before being passed to the appropriate cryptographic 
+function, to prevent canonicalization attacks.
 
 In `local` mode, this encoding is applied to the additional associated data
 (AAD). In `public` mode, which is not encrypted, this encoding is applied to the
@@ -267,7 +277,7 @@ on tokens with the **v3** version header.
 
 ## v3.local
 
-**v1.3ocal** messages **SHALL** be encrypted and authenticated with
+**v3.local** messages **SHALL** be encrypted and authenticated with
 **AES-256-CTR** (AES-CTR from [@!RFC3686] with a 256-bit key) and
 **HMAC-SHA-384** ([@!RFC4231]), using an **Encrypt-then-MAC** construction.
 
@@ -305,7 +315,7 @@ string), and an optional implicit assertion `i` (which defaults to empty string)
 5. Encrypt the message using `AES-256-CTR`, using `Ek` as the key and `n2` as the nonce.
    We'll call the encrypted output of this step `c`.
 6. Pack `h`, `n`, `c`, and `f` together (in that order) using PAE (see
-   (#authentication-padding)). We'll call this `preAuth`.
+   (#pae-definition)). We'll call this `preAuth`.
 7. Calculate HMAC-SHA384 of the output of `preAuth`, using `Ak` as the
    authentication key. We'll call this `t`.
 8. If `f` is:
@@ -369,7 +379,7 @@ Given a message `m`, key `k`, and optional footer `f`
      The leftmost 32 bytes of the first key derivation will produce `Ek`, while
      the remaining 16 bytes will be the AES nonce `n2`.
 6. Pack `h`, `n`, `c`, `f`, and `i` together (in that order) using PAE (see
-   (#authentication-padding)). We'll call this `preAuth`.
+   (#pae-definition)). We'll call this `preAuth`.
 7. Recalculate HMAC-SHA-384 of `preAuth` using `Ak` as the key. We'll call this
    `t2`.
 8. Compare `t` with `t2` using a constant-time string compare function. If they
@@ -419,7 +429,7 @@ Given a message `m`, 384-bit ECDSA secret key `sk`, an optional footer `f`
    [point compression](https://www.secg.org/sec1-v2.pdf)), using [#paseto-v3-compresspublickey].
 3. Set `h` to `v3.public.`
 4. Pack `cpk`, `h`, `m`, `f`, and `i` together (in that order) using PAE (see
-   (#authentication-padding)). We'll call this `m2`.
+   (#pae-definition)). We'll call this `m2`.
 5. Sign `m2` using ECDSA over P-384 and SHA-384 with the private key `sk`.
    We'll call this `sig`. The output of `sig` MUST be in the format `r || s`
    (where `||`means concatenate), for a total length of 96 bytes.
@@ -465,7 +475,7 @@ implicit assertion `i` (which defaults to empty string):
    * `s` to the rightmost 96 bytes
    * `m` to the leftmost remainder of the payload, excluding `s`
 6. Pack `h`, `m`, `f`, and `i` together (in that order) using PAE (see
-   (#authentication-padding)). We'll call this `m2`.
+   (#pae-definition)). We'll call this `m2`.
 7. Use RSA to verify that the signature is valid for the message.
    The padding mode **MUST** be RSASSA-PSS [@!RFC8017]; PKCS1v1.5 is
    explicitly forbidden. The public exponent `e` **MUST** be 65537.
@@ -543,7 +553,7 @@ Given a message `m`, key `k`, and optional footer `f`.
    The remaining 24 bytes will be used as a counter nonce (`n2`).
 5. Encrypt the message using XChaCha20, using `n2` from step 3 as the nonce and `Ek` as the key.
 6. Pack `h`, `n`, `c`, `f`, and `i` together (in that order) using
-   PAE (see (#authentication-padding)). We'll call this `preAuth`.
+   PAE (see (#pae-definition)). We'll call this `preAuth`.
 7. Calculate BLAKE2b-MAC of the output of `preAuth`, using `Ak` as the
    authentication key. We'll call this `t`.
 8. If `f` is:
@@ -604,7 +614,7 @@ Given a message `m`, key `k`, and optional footer `f`.
    The derived key will be the leftmost 32 bytes of the hash output.
    The remaining 24 bytes will be used as a counter nonce (`n2`)
 5. Pack `h`, `n`, `c`, `f`, and `i` together (in that order) using
-   PAE (see (#authentication-padding)). We'll call this `preAuth`.
+   PAE (see (#pae-definition)). We'll call this `preAuth`.
 6. Re-calculate BLAKE2b-MAC of the output of `preAuth`, using `Ak` as the
    authentication key. We'll call this `t2`.
 7. Compare `t` with `t2` using a constant-time string compare function. If they
@@ -659,7 +669,7 @@ optional footer `f` (which defaults to empty string):
    assertion fails, abort signing.
 2. Set `h` to `v4.public.`
 3. Pack `h`, `m`, `f`, and `i` together (in that order) using PAE (see
-   (#authentication-padding)).
+   (#pae-definition)).
    We'll call this `m2`.
 4. Sign `m2` using Ed25519 `sk`. We'll call this `sig`.
    (See below for pseudocode.)
@@ -696,7 +706,7 @@ implicit assertion `i` (which defaults to empty string):
    * `s` to the rightmost 64 bytes
    * `m` to the leftmost remainder of the payload, excluding `s`
 5. Pack `h`, `m`, `f`, and `i` together (in that order) using PAE (see
-   (#authentication-padding)).
+   (#pae-definition)).
    We'll call this `m2`.
 6. Use Ed25519 to verify that the signature is valid for the message:
    (See below for pseudocode.)
@@ -949,6 +959,23 @@ function countKeys(json: string): number {
 ~~~
 Figure: Counting the number of keys in a JSON object
 
+## Implicit Assertions
+
+The Optional Footer (#optional-footer) provides a mechanism for Key IDs
+(and therefore key rotation), and thus qualifies as additional authenticated
+data when using encryption (local tokens).
+
+Implicit Assertions are an additional layer of additional authenticated data
+for a PASETO token. Unlike the optional footer, Implicit Assertions are never
+stored in the token payload. They are, however, passed as an input to `PAE()`
+(#pae-definition) when minting or consuming a PASETO token.
+
+Implicit Assertions are useful for cryptographically binding a PASETO token
+to a specific domain or context without increasing the size of the payload.
+
+Additionally, Implicit Assertions can be used to bind a token to data too
+sensitive to disclose in the payload.
+
 # Intended Use-Cases for PASETO
 
 Like JWTs, PASETOs are intended to be single-use tokens, as there is no built-in
@@ -976,6 +1003,11 @@ insecure algorithms from being selected. Mix-and-match is not a robust
 strategy for usable security engineering, especially when implementations
 have insecure default settings.
 
+Cryptography keys in PASETO are defined as a tuple of (version, purpose,
+bytes) rather than merely (bytes). This implies that cryptography keys 
+**MUST NOT** be used for a different version of PASETO, or for a different
+purpose (local, public).
+
 If a severe security vulnerability is ever discovered in one of the specified
 versions, a new version of the protocol that is not affected should be decided
 by a team of cryptography engineers familiar with the vulnerability in question.
@@ -992,7 +1024,7 @@ footer.
 Furthermore, PASETO users should beware that, if footers are employed to
 implement Key Identification (**kid**), the values stored in the footer
 **MUST** be unrelated to the actual cryptographic key used in verifying the
-token as discussed in (#keyid-support).
+token as discussed in (#key-id-support).
 
 PASETO has no built-in mechanism to resist replay attacks within the token's
 lifetime. Users **SHOULD NOT** attempt to use PASETO to obviate the need for
@@ -1008,6 +1040,15 @@ discouraged.
 
 Implementors **MUST NOT** skip steps, although they **MAY** implement multiple
 steps in a single code statement.
+
+The "Implicit Assertions" feature (#implicit-assertions) is intended to provide 
+a mechanism for additional authenticated data (AAD) that isn't stored in the
+token payload.
+
+Applications may leverage this feature to bind tokens to a specific domain or
+context, but as it is not stored in the PASETO token, the application is
+solely responsible for managing this data. Failure to manage this state will
+result in authentication failures and could become a Denial of Service risk.
 
 # IANA Considerations
 
@@ -1027,12 +1068,12 @@ Initial values for the "PASETO Headers" registry are given below; future
 assignments are to be made through Expert Review [@!RFC8126], such as the
 [CFRG].
 
-| Value     | PASETO Header Meaning | Definition  |
-| --------- | --------------------- | ----------- |
-| v3.local  | Version 3, local      | (#v3local)  |
-| v3.public | Version 3, public     | (#v3public) |
-| v4.local  | Version 4, local      | (#v4local)  |
-| v4.public | Version 4, public     | (#v4public) |
+| Value     | PASETO Header Meaning | Definition   |
+| --------- | --------------------- | ------------ |
+| v3.local  | Version 3, local      | (#v3-local)  |
+| v3.public | Version 3, public     | (#v3-public) |
+| v4.local  | Version 4, local      | (#v4-local)  |
+| v4.public | Version 4, public     | (#v4-public) |
 Table: PASETO Headers and their respective meanings
 
 Additionally, the IANA should reserve a new "PASETO Claims" registry.
@@ -1062,18 +1103,19 @@ Additionally, the IANA should reserve a new "PASETO Claims" registry.
 #### Test Vector v3-E-1
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    00000000 00000000 00000000 00000000
-          00000000 00000000 00000000 00000000
-Payload:  {"data":"this is a secret message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Token:    v3.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADbfcIURX_
-          0pVZVU1mAESUzrKZAsRm2EsD6yBoZYn6cpVZNzSJOhSDN-sRaWjfLU-yn9OJ
-          H1J_B8GKtOQ9gSQlb8yk9Iza7teRdkiR89ZFyvPPsVjjFiepFUVcMa-LP18z
-          V77f_crJrVXWa5PDNRkCSeHfBBeg
-Implicit: 
+Token:      v3.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADbfcIUR
+            X_0pVZVU1mAESUzrKZAsRm2EsD6yBoZYn6cpVZNzSJOhSDN-sRaWjfLU-y
+            n9OJH1J_B8GKtOQ9gSQlb8yk9Iza7teRdkiR89ZFyvPPsVjjFiepFUVcMa
+            -LP18zV77f_crJrVXWa5PDNRkCSeHfBBeg
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      00000000 00000000 00000000 00000000
+            00000000 00000000 00000000 00000000
+Payload:    {"data":"this is a secret message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v3-E-2
@@ -1081,35 +1123,37 @@ Implicit:
 Same as v3-E-1, but with a slightly different message.
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    00000000 00000000 00000000 00000000
-          00000000 00000000 00000000 00000000
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Token:    v3.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADbfcIURX_
-          0pVZVU1mAESUzrKZAqhWxBMDgyBoZYn6cpVZNzSJOhSDN-sRaWjfLU-yn9OJ
-          H1J_B8GKtOQ9gSQlb8yk9IzZfaZpReVpHlDSwfuygx1riVXYVs-UjcrG_apl
-          9oz3jCVmmJbRuKn5ZfD8mHz2db0A
-Implicit: 
+Token:      v3.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADbfcIUR
+            X_0pVZVU1mAESUzrKZAqhWxBMDgyBoZYn6cpVZNzSJOhSDN-sRaWjfLU-y
+            n9OJH1J_B8GKtOQ9gSQlb8yk9IzZfaZpReVpHlDSwfuygx1riVXYVs-Ujc
+            rG_apl9oz3jCVmmJbRuKn5ZfD8mHz2db0A
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      00000000 00000000 00000000 00000000
+            00000000 00000000 00000000 00000000
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v3-E-3
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    26f75533 54482a1d 91d47846 27854b8d
-          a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload: {"data":"this is a secret message",
-         "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnD
-          ait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdE
-          K5SDvl02_HjWKJW2oqGMOQJlxnt5xyhQjFJomwnt7WW_7r2VT0G704ifult0
-          11-TgLCyQ2X8imQhniG_hAQ4BydM
-Implicit: 
+Token:      v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQ
+            nDait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiw
+            RsdEK5SDvl02_HjWKJW2oqGMOQJlxnt5xyhQjFJomwnt7WW_7r2VT0G704
+            ifult011-TgLCyQ2X8imQhniG_hAQ4BydM
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    {"data":"this is a secret message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v3-E-4
@@ -1117,36 +1161,38 @@ Implicit:
 Same as v3-E-3, but with a slightly different message.
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    26f75533 54482a1d 91d47846 27854b8d
-          a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnD
-          ait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdE
-          K5SDvl02_HjWKJW2oqGMOQJlBZa_gOpVj4gv0M9lV6Pwjp8JS_MmaZaTA1LL
-          TULXybOBZ2S4xMbYqYmDRhh3IgEk
-Implicit: 
+Token:      v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQ
+            nDait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiw
+            RsdEK5SDvl02_HjWKJW2oqGMOQJlBZa_gOpVj4gv0M9lV6Pwjp8JS_MmaZ
+            aTA1LLTULXybOBZ2S4xMbYqYmDRhh3IgEk
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v3-E-5
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    26f75533 54482a1d 91d47846 27854b8d
-          a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload:  {"data":"this is a secret message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
-Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnD
-          ait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdE
-          K5SDvl02_HjWKJW2oqGMOQJlkYSIbXOgVuIQL65UMdW9WcjOpmqvjqD40NNz
-          ed-XPqn1T3w-bJvitYpUJL_rmihc.eyJraWQiOiJVYmtLOFk2aXY0R1poRnA
-          2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
-Implicit: 
+Token:      v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQ
+            nDait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiw
+            RsdEK5SDvl02_HjWKJW2oqGMOQJlkYSIbXOgVuIQL65UMdW9WcjOpmqvjq
+            D40NNzed-XPqn1T3w-bJvitYpUJL_rmihc.eyJraWQiOiJVYmtLOFk2aXY
+            0R1poRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    {"data":"this is a secret message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v3-E-6
@@ -1154,37 +1200,39 @@ Implicit:
 Same as v3-E-5, but with a slightly different message.
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    26f75533 54482a1d 91d47846 27854b8d
-          a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
-Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQn
-          Dait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRs
-          dEK5SDvl02_HjWKJW2oqGMOQJmSeEMphEWHiwtDKJftg41O1F8Hat-8kQ82
-          ZIAMFqkx9q5VkWlxZke9ZzMBbb3Znfo.eyJraWQiOiJVYmtLOFk2aXY0R1p
-          oRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
-Implicit: 
+Token:      v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQ
+            nDait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiw
+            RsdEK5SDvl02_HjWKJW2oqGMOQJmSeEMphEWHiwtDKJftg41O1F8Hat-8k
+            Q82ZIAMFqkx9q5VkWlxZke9ZzMBbb3Znfo.eyJraWQiOiJVYmtLOFk2aXY
+            0R1poRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v3-E-7
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    26f75533 54482a1d 91d47846 27854b8d
-          a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload:  {"data":"this is a secret message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
-Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQn
-          Dait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRs
-          dEK5SDvl02_HjWKJW2oqGMOQJkzWACWAIoVa0bz7EWSBoTEnS8MvGBYHHo6
-          t6mJunPrFR9JKXFCc0obwz5N-pxFLOc.eyJraWQiOiJVYmtLOFk2aXY0R1p
-          oRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
-Implicit: {"test-vector":"3-E-7"} 
+Token:      v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQ
+            nDait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiw
+            RsdEK5SDvl02_HjWKJW2oqGMOQJkzWACWAIoVa0bz7EWSBoTEnS8MvGBYH
+            Ho6t6mJunPrFR9JKXFCc0obwz5N-pxFLOc.eyJraWQiOiJVYmtLOFk2aXY
+            0R1poRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    {"data":"this is a secret message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
+Implicit:   {"test-vector":"3-E-7"}
+ExpectFail: no
 ~~~
 
 #### Test Vector v3-E-8
@@ -1192,37 +1240,39 @@ Implicit: {"test-vector":"3-E-7"}
 Same as v3-E-7, but with a slightly different message and implicit assertion.
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    26f75533 54482a1d 91d47846 27854b8d
-          a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
-Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQn
-          Dait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRs
-          dEK5SDvl02_HjWKJW2oqGMOQJmZHSSKYR6AnPYJV6gpHtx6dLakIG_AOPhu
-          8vKexNyrv5_1qoom6_NaPGecoiz6fR8.eyJraWQiOiJVYmtLOFk2aXY0R1p
-          oRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
-Implicit: {"test-vector":"3-E-8"}
+Token:      v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQ
+            nDait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiw
+            RsdEK5SDvl02_HjWKJW2oqGMOQJmZHSSKYR6AnPYJV6gpHtx6dLakIG_AO
+            Phu8vKexNyrv5_1qoom6_NaPGecoiz6fR8.eyJraWQiOiJVYmtLOFk2aXY
+            0R1poRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo"}
+Implicit:   {"test-vector":"3-E-8"}
+ExpectFail: no
 ~~~
 
 #### Test Vector v3-E-9
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    26f75533 54482a1d 91d47846 27854b8d
-          a6b8042a 7966523c 2b404e8d bbe7f7f2
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   arbitrary-string-that-isn't-json
-Token:    v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQn
-          Dait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRs
-          dEK5SDvl02_HjWKJW2oqGMOQJlk1nli0_wijTH_vCuRwckEDc82QWK8-lG2
-          fT9wQF271sgbVRVPjm0LwMQZkvvamqU.YXJiaXRyYXJ5LXN0cmluZy10aGF
-          0LWlzbid0LWpzb24
-Implicit: {"test-vector":"3-E-9"}
+Token:      v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQ
+            nDait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiw
+            RsdEK5SDvl02_HjWKJW2oqGMOQJlk1nli0_wijTH_vCuRwckEDc82QWK8-
+            lG2fT9wQF271sgbVRVPjm0LwMQZkvvamqU.YXJiaXRyYXJ5LXN0cmluZy1
+            0aGF0LWlzbid0LWpzb24
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     arbitrary-string-that-isn't-json
+Implicit:   {"test-vector":"3-E-9"}
+ExpectFail: no
 ~~~
 
 ### v3.public (Public-Key Authentication) Test Vectors
@@ -1247,8 +1297,9 @@ Public Key:  -----BEGIN PUBLIC KEY-----
              -----END PUBLIC KEY-----
 Payload:     {"data":"this is a signed message",
              "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Implicit:
+Footer:      
+Implicit:    
+ExpectFail:  no
 ~~~
 
 #### Test Vector v3-S-2
@@ -1274,7 +1325,8 @@ Public Key:  -----BEGIN PUBLIC KEY-----
 Payload:     {"data":"this is a signed message",
              "exp":"2022-01-01T00:00:00+00:00"}
 Footer:      {"kid":"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn"}
-Implicit:
+Implicit:    
+ExpectFail:  no
 ~~~
 
 #### Test Vector v3-S-3
@@ -1301,6 +1353,75 @@ Payload:     {"data":"this is a signed message",
              "exp":"2022-01-01T00:00:00+00:00"}
 Footer:      {"kid":"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn"}
 Implicit:    {"test-vector":"3-S-3"}
+ExpectFail:  no
+~~~
+
+#### Test Vector v3-F-1
+
+This test vector **MUST** fail, because the keys are not meant for local
+tokens.
+
+~~~
+Token:       v3.local.tthw-G1Da_BzYeMu_GEDp-IyQ7jzUCQHxCHRdDY6hQjKg6Cux
+             ECXfjOzlmNgNJ-WELjN61gMDnldG9OLkr3wpxuqdZksCzH9Ul16t3pXCLG
+             PoHQ9_l51NOqVmMLbFVZOPhsmdhef9RxJwmqvzQ_Mo_JkYRlrNA.YXJiaX
+             RyYXJ5LXN0cmluZy10aGF0LWlzbid0LWpzb24
+Secret key:  -----BEGIN EC PRIVATE KEY-----
+             MIGkAgEBBDAgNHYJYHR3rKj7+8XmIYRV8xmWaXku+LRm+qh73Gd5gUTISN
+             0DZh7tWsYkYTQM6pagBwYFK4EEACKhZANiAAT7y3xp7hxgV5vnozQTSHjZ
+             xcW/NdVS2rY8AUA5ftFM72N9dyCSXERpnqMOcodMcvt8kgcrB8KcKee0HU
+             23E79/s4CvEs8hBfnjSUd/gcAm08EjSIz06iWjrNy4NakxR3I=
+             -----END EC PRIVATE KEY-----
+Public Key:  -----BEGIN PUBLIC KEY-----
+             MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+8t8ae4cYFeb56M0E0h42cXFvz
+             XVUtq2PAFAOX7RTO9jfXcgklxEaZ6jDnKHTHL7fJIHKwfCnCnntB1NtxO/
+             f7OArxLPIQX540lHf4HAJtPBI0iM9Oolo6zcuDWpMUdy
+             -----END PUBLIC KEY-----
+Payload:     
+Footer:      arbitrary-string-that-isn't-json
+Implicit:    {"test-vector":"3-F-1"}
+ExpectFail:  YES
+~~~
+
+#### Test Vector v3-F-2
+
+This test vector **MUST** fail, because the key is not meant for public
+tokens.
+
+~~~
+Token:       v3.public.eyJpbnZhbGlkIjoidGhpcyBzaG91bGQgbmV2ZXIgZGVjb2Rl
+             In1hbzIBD_EU54TYDTvsN9bbCU1QPo7FDeIhijkkcB9BrVH73XyM3Wwvu1
+             pJaGCOEc0R5DVe9hb1ka1cYBd0goqVHt0NQ2NhPtILz4W36eCCqyU4uV6x
+             DMeLI8ni6r3GnaY.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW
+             9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Key:         70717273 74757677 78797a7b 7c7d7e7f
+             80818283 84858687 88898a8b 8c8d8e8f
+Nonce:       df654812 bac49266 3825520b a2f6e67c
+             f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:     
+Footer:      {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Implicit:    {"test-vector":"3-F-2"}
+ExpectFail:  YES
+~~~
+
+#### Test Vector v3-F-3
+
+This test vector **MUST** fail, because token is Version 4 while we're 
+operating in Version 3.
+
+~~~
+Token:      v4.local.1JgN1UG8TFAYS49qsx8rxlwh-9E4ONUm3slJXYi5EibmzxpF0
+            Q-du6gakjuyKCBX8TvnSLOKqCPu8Yh3WSa5yJWigPy33z9XZTJF2HQ9wlL
+            DPtVn_Mu1pPxkTU50ZaBKblJBufRA.YXJiaXRyYXJ5LXN0cmluZy10aGF0
+            LWlzbid0LWpzb24
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    
+Footer:     arbitrary-string-that-isn't-json
+Implicit:   {"test-vector":"3-F-3"}
+ExpectFail: YES
 ~~~
 
 ## PASETO v4 Test Vectors
@@ -1310,18 +1431,19 @@ Implicit:    {"test-vector":"3-S-3"}
 #### Test Vector v4-E-1
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    00000000 00000000 00000000 00000000
-          00000000 00000000 00000000 00000000
-Payload:  {"data":"this is a secret message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Token:    v4.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAr68PS4
-          AXe7If_ZgesdkUMvSwscFlAl1pk5HC0e8kApeaqMfGo_7OpBnwJOAbY9V7WU
-          6abu74MmcUE8YWAiaArVI8XJ5hOb_4v9RmDkneN0S92dx0OW4pgy7omxgf3S
-          8c3LlQg
-Implicit: 
+Token:      v4.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAr68P
+            S4AXe7If_ZgesdkUMvSwscFlAl1pk5HC0e8kApeaqMfGo_7OpBnwJOAbY9
+            V7WU6abu74MmcUE8YWAiaArVI8XJ5hOb_4v9RmDkneN0S92dx0OW4pgy7o
+            mxgf3S8c3LlQg
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      00000000 00000000 00000000 00000000
+            00000000 00000000 00000000 00000000
+Payload:    {"data":"this is a secret message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-E-2
@@ -1329,35 +1451,37 @@ Implicit:
 Same as v4-E-1, but with a slightly different message.
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    00000000 00000000 00000000 00000000
-          00000000 00000000 00000000 00000000
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Token:    v4.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAr68PS4
-          AXe7If_ZgesdkUMvS2csCgglvpk5HC0e8kApeaqMfGo_7OpBnwJOAbY9V7WU
-          6abu74MmcUE8YWAiaArVI8XIemu9chy3WVKvRBfg6t8wwYHK0ArLxxfZP73W
-          _vfwt5A
-Implicit: 
+Token:      v4.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAr68P
+            S4AXe7If_ZgesdkUMvS2csCgglvpk5HC0e8kApeaqMfGo_7OpBnwJOAbY9
+            V7WU6abu74MmcUE8YWAiaArVI8XIemu9chy3WVKvRBfg6t8wwYHK0ArLxx
+            fZP73W_vfwt5A
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      00000000 00000000 00000000 00000000
+            00000000 00000000 00000000 00000000
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
-#### Test Vector v2-E-3
+#### Test Vector v4-E-3
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    df654812 bac49266 3825520b a2f6e67c
-          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
-Payload:  {"data":"this is a secret message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
-          tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
-          P-PRdoHjd5-RHCiExR1IK6t6-tyebyWG6Ov7kKvBdkrrAJ837lKP3iDag2hz
-          UPHuMKA
-Implicit:
+Token:      v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw
+            7_tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2
+            IcweP-PRdoHjd5-RHCiExR1IK6t6-tyebyWG6Ov7kKvBdkrrAJ837lKP3i
+            Dag2hzUPHuMKA
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      df654812 bac49266 3825520b a2f6e67c
+            f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:    {"data":"this is a secret message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-E-4
@@ -1365,36 +1489,38 @@ Implicit:
 Same as v4-E-3, but with a slightly different message.
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    df654812 bac49266 3825520b a2f6e67c
-          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
-          tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
-          P-PRdoHjd5-RHCiExR1IK6t4gt6TiLm55vIH8c_lGxxZpE3AWlH4WTR0v45n
-          sWoU3gQ
-Implicit:
+Token:      v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw
+            7_tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2
+            IcweP-PRdoHjd5-RHCiExR1IK6t4gt6TiLm55vIH8c_lGxxZpE3AWlH4WT
+            R0v45nsWoU3gQ
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      df654812 bac49266 3825520b a2f6e67c
+            f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-E-5
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    df654812 bac49266 3825520b a2f6e67c
-          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
-Payload:  {"data":"this is a secret message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
-Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
-          tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
-          P-PRdoHjd5-RHCiExR1IK6t4x-RMNXtQNbz7FvFZ_G-lFpk5RG3EOrwDL6Cg
-          DqcerSQ.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NO
-          eTlEZmdMMVc2MGhhTiJ9
-Implicit:
+Token:      v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw
+            7_tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2
+            IcweP-PRdoHjd5-RHCiExR1IK6t4x-RMNXtQNbz7FvFZ_G-lFpk5RG3EOr
+            wDL6CgDqcerSQ.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9l
+            QTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      df654812 bac49266 3825520b a2f6e67c
+            f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:    {"data":"this is a secret message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-E-6
@@ -1402,37 +1528,39 @@ Implicit:
 Same as v4-E-5, but with a slightly different message.
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    df654812 bac49266 3825520b a2f6e67c
-          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
-Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
-          tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
-          P-PRdoHjd5-RHCiExR1IK6t6pWSA5HX2wjb3P-xLQg5K5feUCX4P2fpVK3ZL
-          WFbMSxQ.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NO
-          eTlEZmdMMVc2MGhhTiJ9
-Implicit:
+Token:      v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw
+            7_tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2
+            IcweP-PRdoHjd5-RHCiExR1IK6t6pWSA5HX2wjb3P-xLQg5K5feUCX4P2f
+            pVK3ZLWFbMSxQ.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9l
+            QTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      df654812 bac49266 3825520b a2f6e67c
+            f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-E-7
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    df654812 bac49266 3825520b a2f6e67c
-          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
-Payload:  {"data":"this is a secret message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
-Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
-          tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
-          P-PRdoHjd5-RHCiExR1IK6t40KCCWLA7GYL9KFHzKlwY9_RnIfRrMQpueydL
-          EAZGGcA.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NO
-          eTlEZmdMMVc2MGhhTiJ9
-Implicit: {"test-vector":"4-E-7"}
+Token:      v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw
+            7_tcaOM5GNEcnTxl60WkwMsYXw6FSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2
+            IcweP-PRdoHjd5-RHCiExR1IK6t40KCCWLA7GYL9KFHzKlwY9_RnIfRrMQ
+            pueydLEAZGGcA.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9l
+            QTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      df654812 bac49266 3825520b a2f6e67c
+            f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:    {"data":"this is a secret message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Implicit:   {"test-vector":"4-E-7"}
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-E-8
@@ -1440,36 +1568,38 @@ Implicit: {"test-vector":"4-E-7"}
 Same as v4-E-7, but with a slightly different message and implicit assertion.
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    df654812 bac49266 3825520b a2f6e67c
-          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
-Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
-          tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
-          P-PRdoHjd5-RHCiExR1IK6t5uvqQbMGlLLNYBc7A6_x7oqnpUK5WLvj24eE4
-          DVPDZjw.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NO
-          eTlEZmdMMVc2MGhhTiJ9
-Implicit: {"test-vector":"4-E-8"}
+Token:      v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw
+            7_tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2
+            IcweP-PRdoHjd5-RHCiExR1IK6t5uvqQbMGlLLNYBc7A6_x7oqnpUK5WLv
+            j24eE4DVPDZjw.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9l
+            QTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      df654812 bac49266 3825520b a2f6e67c
+            f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Implicit:   {"test-vector":"4-E-8"}
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-E-9
 
 ~~~
-Key:      70717273 74757677 78797a7b 7c7d7e7f
-          80818283 84858687 88898a8b 8c8d8e8f
-Nonce:    df654812 bac49266 3825520b a2f6e67c
-          f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
-Payload:  {"data":"this is a hidden message",
-          "exp":"2022-01-01T00:00:00+00:00"}
-Footer:   arbitrary-string-that-isn't-json
-Token:    v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw7_
-          tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2Icwe
-          P-PRdoHjd5-RHCiExR1IK6t6tybdlmnMwcDMw0YxA_gFSE_IUWl78aMtOepF
-          YSWYfQA.YXJiaXRyYXJ5LXN0cmluZy10aGF0LWlzbid0LWpzb24
-Implicit: {"test-vector":"4-E-9"}
+Token:      v4.local.32VIErrEkmY4JVILovbmfPXKW9wT1OdQepjMTC_MOtjA4kiqw
+            7_tcaOM5GNEcnTxl60WiA8rd3wgFSNb_UdJPXjpzm0KW9ojM5f4O2mRvE2
+            IcweP-PRdoHjd5-RHCiExR1IK6t6tybdlmnMwcDMw0YxA_gFSE_IUWl78a
+            MtOepFYSWYfQA.YXJiaXRyYXJ5LXN0cmluZy10aGF0LWlzbid0LWpzb24
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      df654812 bac49266 3825520b a2f6e67c
+            f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:    {"data":"this is a hidden message",
+            "exp":"2022-01-01T00:00:00+00:00"}
+Footer:     arbitrary-string-that-isn't-json
+Implicit:   {"test-vector":"4-E-9"}
+ExpectFail: no
 ~~~
 
 ### v4.public (Public-Key Authentication) Test Vectors
@@ -1489,8 +1619,9 @@ Public Key: 1eb9dbbb bc047c03 fd70604e 0071f098
             7e16b28b 757225c1 1f00415d 0e20b1a2
 Payload:    {"data":"this is a signed message",
             "exp":"2022-01-01T00:00:00+00:00"}
-Footer:
-Implicit:
+Footer:     
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-S-2
@@ -1510,7 +1641,8 @@ Public Key: 1eb9dbbb bc047c03 fd70604e 0071f098
 Payload:    {"data":"this is a signed message",
             "exp":"2022-01-01T00:00:00+00:00"}
 Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
-Implicit:
+Implicit:   
+ExpectFail: no
 ~~~
 
 #### Test Vector v4-S-3
@@ -1531,4 +1663,67 @@ Payload:    {"data":"this is a signed message",
             "exp":"2022-01-01T00:00:00+00:00"}
 Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
 Implicit:   {"test-vector":"4-S-3"}
+ExpectFail: no
+~~~
+
+#### Test Vector 4-F-1
+
+This test vector **MUST** fail, because the keys are not meant for local
+tokens.
+
+~~~
+Token:      v4.local.vngXfCISbnKgiP6VWGuOSlYrFYU300fy9ijW33rznDYgxHNPw
+            WluAY2Bgb0z54CUs6aYYkIJ-bOOOmJHPuX_34Agt_IPlNdGDpRdGNnBz2M
+            pWJvB3cttheEc1uyCEYltj7wBQQYX.YXJiaXRyYXJ5LXN0cmluZy10aGF0
+            LWlzbid0LWpzb24
+Secret Key: b4cbfb43 df4ce210 727d953e 4a713307
+            fa19bb7d 9f850414 38d9e11b 942a3774
+            1eb9dbbb bc047c03 fd70604e 0071f098
+            7e16b28b 757225c1 1f00415d 0e20b1a2
+Public Key: 1eb9dbbb bc047c03 fd70604e 0071f098
+            7e16b28b 757225c1 1f00415d 0e20b1a2
+Payload:    
+Footer:     arbitrary-string-that-isn't-json
+Implicit:   {"test-vector":"4-F-1"}
+ExpectFail: YES
+~~~
+
+#### Test Vector 4-F-2
+
+This test vector **MUST** fail, because the key is not meant for public
+tokens.
+
+~~~
+Token:      v4.public.eyJpbnZhbGlkIjoidGhpcyBzaG91bGQgbmV2ZXIgZGVjb2Rl
+            In22Sp4gjCaUw0c7EH84ZSm_jN_Qr41MrgLNu5LIBCzUr1pn3Z-Wukg9h3
+            ceplWigpoHaTLcwxj0NsI1vjTh67YB.eyJraWQiOiJ6VmhNaVBCUDlmUmY
+            yc25FY1Q3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      df654812 bac49266 3825520b a2f6e67c
+            f5ca5bdc 13d4e750 7a98cc4c 2fcc3ad8
+Payload:    
+Footer:     {"kid":"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN"}
+Implicit:   {"test-vector":"4-F-2"}
+ExpectFail: YES
+~~~
+
+#### Test Vector 4-F-3
+
+This test vector **MUST** fail, because token is Version 3 while we're
+operating in Version 4.
+
+~~~
+Token:      v3.local.23e_2PiqpQBPvRFKzB0zHhjmxK3sKo2grFZRRLM-U7L0a8uHx
+            uF9RlVz3Ic6WmdUUWTxCaYycwWV1yM8gKbZB2JhygDMKvHQ7eBf8GtF0r3
+            K0Q_gF1PXOxcOgztak1eD1dPe9rLVMSgR0nHJXeIGYVuVrVoLWQ.YXJiaX
+            RyYXJ5LXN0cmluZy10aGF0LWlzbid0LWpzb24
+Key:        70717273 74757677 78797a7b 7c7d7e7f
+            80818283 84858687 88898a8b 8c8d8e8f
+Nonce:      26f75533 54482a1d 91d47846 27854b8d
+            a6b8042a 7966523c 2b404e8d bbe7f7f2
+Payload:    
+Footer:     arbitrary-string-that-isn't-json
+Implicit:   {"test-vector":"4-F-3"}
+ExpectFail: YES
 ~~~
